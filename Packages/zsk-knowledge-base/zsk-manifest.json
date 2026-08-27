@@ -1,0 +1,133 @@
+{
+  "dependencies": {
+    "feishu_cli": "required_only_for_feishu"
+  },
+  "files": [
+    {
+      "path": "shared/__init__.py",
+      "sha256": "3f79d6dd91b74c5b2d3b753797a67252e650c2e15f481519590dcac2e66befaa"
+    },
+    {
+      "path": "shared/adapter.py",
+      "sha256": "89902042ca8ea10eec530eeb36c3614a1301b3bdd0df4a64abb70e2aa3fc0499"
+    },
+    {
+      "path": "shared/contracts.md",
+      "sha256": "aee1a79185c5b00955966f5a4d85d42bbe1a36d6dd9b80015495b32249ec1615"
+    },
+    {
+      "path": "shared/contracts.py",
+      "sha256": "b9500bae85966086196c33c4a7cd6b3323d7d679e38ba47c95b56c61fe13aacd"
+    },
+    {
+      "path": "shared/evidence.py",
+      "sha256": "7c157e957d3a52a7284bbf014ec677f1bb7cc095bc88d228b68ee44aae1b0245"
+    },
+    {
+      "path": "shared/fake_adapter.py",
+      "sha256": "dc7f2e5efc805313bd182e827969d1c84025f1ccac59624b1fad32165aa58b73"
+    },
+    {
+      "path": "shared/feishu_adapter.py",
+      "sha256": "55187b16d8c2abb6839396ccbd8798d2a2c13db429c7aec9e48f423c581a82d8"
+    },
+    {
+      "path": "shared/feishu_cli.py",
+      "sha256": "5aa33abae95d964d4158cfefd62e5805612cfe3a6c439f3b393ece0732f387d1"
+    },
+    {
+      "path": "shared/feishu_stage5.py",
+      "sha256": "f1e759aab8c781f277f3fda69db5420ed1cce9fd7590be11c0a003deeb755f3c"
+    },
+    {
+      "path": "shared/obsidian_adapter.py",
+      "sha256": "4deaca1b783cbe1cc4b2a70ee12563bf3b799b5f606e5f45ccd5d6b4e5aa301f"
+    },
+    {
+      "path": "shared/obsidian_stage6.py",
+      "sha256": "24806e7f857259548c239a43cdb417a959f6a816018f51a62afe8c46d79d8c77"
+    },
+    {
+      "path": "shared/stage11_bootstrap.py",
+      "sha256": "4b46becb4f5cc6cf44df099846a66278d5d218920a82bf5d9837b5cb3a6e2623"
+    },
+    {
+      "path": "shared/stage2_router.py",
+      "sha256": "78cc578ee453da85f34bbed9c949b65576a29aa6174107e98e426cfe9ba67f0c"
+    },
+    {
+      "path": "shared/stage5_intake.py",
+      "sha256": "7ce8a3b149cc8d9c7c0ff5f5cceeb1ad4a79f4303796398f539ec21fc4e11036"
+    },
+    {
+      "path": "shared/stage6_knowledge.py",
+      "sha256": "86fa9a69ed6f4ab5a655faf8e3364ed35b364033cbc5618133d51572e99b832c"
+    },
+    {
+      "path": "shared/stage7_method.py",
+      "sha256": "92dd3e150c6d67d768acb8e3e388f85887fb031d777f7e5dfb26cd1d5c8135f1"
+    },
+    {
+      "path": "shared/stage8_profile.py",
+      "sha256": "50c4b14b03e6cc578c57ba06b082faa457d5c6992d5e496c7a8538e82780d857"
+    },
+    {
+      "path": "shared/templates.py",
+      "sha256": "2555f59d47cfe43a47e582e37fda342312c6d3f8464b7aa37cc79b566d9ff7cb"
+    },
+    {
+      "path": "zsk-duibiao/SKILL.md",
+      "sha256": "6e4c488f9577232cb6503740db1a3e735dc588c0f33a994cb716ea1f8a95548a"
+    },
+    {
+      "path": "zsk-duibiao/agents/openai.yaml",
+      "sha256": "1df49bf74b0d447c8649f0e35a8abf54d216fc201b3a1a1fda73cd331dc74d4d"
+    },
+    {
+      "path": "zsk-profile/SKILL.md",
+      "sha256": "68b11e5fb80a361cadae651fcd442e8a3849be0aa70a0b60a4e1c4c6d42486fb"
+    },
+    {
+      "path": "zsk-profile/agents/openai.yaml",
+      "sha256": "0dcbc634454c66ad1864ab50f28044bee46037c8500f03057647358dabed1b73"
+    },
+    {
+      "path": "zsk-router/SKILL.md",
+      "sha256": "2ba8adc788c999735404e7699d5177b8985ee84e83cd3154cdbd98337ed66df3"
+    },
+    {
+      "path": "zsk-router/agents/openai.yaml",
+      "sha256": "b0f4c2cd08bf32b60e66e0d356f08432b8787e5eda2ca63252e66dcc6007d62a"
+    },
+    {
+      "path": "zsk-ruku/SKILL.md",
+      "sha256": "141c275820566ab78039d7efa9b8aeb44ef7114b27e8a0c4a09bd3052429f6e6"
+    },
+    {
+      "path": "zsk-ruku/agents/openai.yaml",
+      "sha256": "f612fddd8d86f064e1f965a0deced52f66e884d08051d445a0b0cd3529e617db"
+    },
+    {
+      "path": "zsk-zhishi/SKILL.md",
+      "sha256": "b8131817eeaa4cfcc7f76f0dcb6fcd2ec7502c3f49da697275bd29a3bfeaad3c"
+    },
+    {
+      "path": "zsk-zhishi/agents/openai.yaml",
+      "sha256": "ad9c9f704940e87abb718a2e480c1809fc5e85524f76e287cbe9b9b0f7533be0"
+    }
+  ],
+  "package_id": "zsk-knowledge-base",
+  "schema_version": "zsk-delivery-v1",
+  "skills": [
+    "zsk-router",
+    "zsk-ruku",
+    "zsk-zhishi",
+    "zsk-duibiao",
+    "zsk-profile"
+  ],
+  "support": [
+    "shared"
+  ],
+  "version": "0.2.2-stage11-preview",
+  "workbuddy_status": "folder_import_instructions_only"
+}

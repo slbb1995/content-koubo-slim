@@ -1,0 +1,27 @@
+{
+  "contract_version": "2.0",
+  "client_id": "my-zsk-vault",
+  "asset_roots": {
+    "knowledge": "03-业务知识库",
+    "method": "04-内容方法库",
+    "profile": "05-IP-Profile",
+    "output": "07-生产与反馈"
+  },
+  "default_speaker_mode": "neutral",
+  "allowed_speaker_modes": [
+    "neutral",
+    "company_brand",
+    "personal_ip"
+  ],
+  "profile_policy": {
+    "required_when": [
+      "personal_ip"
+    ],
+    "selector": {
+      "status": "active",
+      "is_primary": true
+    }
+  },
+  "default_platform": "short_video",
+  "output_template": "content-slim/{profile_or_brand}/weekly"
+}
