@@ -1,0 +1,4 @@
+interface:
+  display_name: "Content Analyzer 爆款拆解"
+  short_description: "拆解一至五篇参考并融合当前客户内容方法，生成完整写作方向"
+  default_prompt: "使用 $content-analyzer 逐篇拆解已准备的参考与方法候选，生成同版详细拆解报告和五组客户确认投影；五组只用于 Gate A，后续 Writer 必须使用详细报告形成的蓝图。"

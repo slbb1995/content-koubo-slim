@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://content-slim.invalid/schemas/client-registry.schema.json",
+  "title": "Content Slim Client Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["registry_version", "clients"],
+  "properties": {
+    "registry_version": {
+      "const": "2.0"
+    },
+    "clients": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["vault_root", "manifest_relative_path"],
+        "properties": {
+          "vault_root": {
+            "type": "string",
+            "minLength": 1
+          },
+          "manifest_relative_path": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

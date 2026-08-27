@@ -1,0 +1,4 @@
+interface:
+  display_name: "配套文案生成"
+  short_description: "根据已确认口播正文生成标题、发布正文、标签和推荐项"
+  default_prompt: "Use $content-publish-pack to generate a complete publish pack from the confirmed spoken draft."

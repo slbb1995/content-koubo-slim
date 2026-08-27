@@ -1,0 +1,5 @@
+interface:
+  display_name: "Content Writer 口播正文"
+  short_description: "按已确认方向和唯一上下文包生成、修改并确认可直接朗读的口播正文"
+  default_prompt: >-
+    使用 $content-writer 按已确认方向、冻结主模式和唯一 Context Pack 中的详细拆解蓝图生成或修改口播正文，并停在正文确认；不得只根据客户五组摘要写作。
