@@ -40,7 +40,7 @@ description: Content V2 Slim 的唯一用户入口。用于开始、继续、恢
 }
 ```
 
-`client_id` 和 `speaker_mode` 从当前配置解析。当前 Codex Host 没有向入口提供可验证且跨 `start / respond-direction / status` 稳定的身份，因此普通 CLI 不接收 `host_request_id` 或原始 `task_key`。确定性程序根据冻结的客户、讲述模式、用户原始选题和参考来源集合生成 task-record；后续内部操作只接受已经落盘并通过完整性校验的相对句柄。不得让用户填写或让 AI 临时编造；不得改传绝对路径，必须原样复用入口返回的 task-record。
+`client_id` 和 `speaker_mode` 从当前配置解析。默认读取当前 Codex Host 的持久 Registry；只有一条有效客户记录时自动采用，多条记录时必须让用户明确选择，不扫描电脑或猜测知识库。当前 Codex Host 没有向入口提供可验证且跨 `start / respond-direction / status` 稳定的身份，因此普通 CLI 不接收 `host_request_id` 或原始 `task_key`。确定性程序根据冻结的客户、讲述模式、用户原始选题和参考来源集合生成 task-record；后续内部操作只接受已经落盘并通过完整性校验的相对句柄。不得让用户填写或让 AI 临时编造；不得改传绝对路径，必须原样复用入口返回的 task-record。
 
 ## 输出
 
@@ -64,7 +64,7 @@ description: Content V2 Slim 的唯一用户入口。用于开始、继续、恢
 
 ## 执行流程
 
-1. 从传入 Registry 按 `client_id` 定位 Vault 和 Manifest；
+1. 从当前 Host 的默认或显式 Registry 定位客户：唯一记录自动采用，多条记录等待用户选择，再按 `client_id` 定位 Vault 和 Manifest；
 2. 校验 Manifest 并解析 `speaker_mode`；
 3. 在创建 Run 前验证 1—5 篇参考可读，再根据冻结业务身份和参考来源集合生成受控 task-record，创建或恢复唯一 Run；
 4. create-only 冻结用户原始选题、参考集合、`client_id` 和 `speaker_mode`；系统内部生成规范化问题并标记 `system_generated`，不要求用户或 AI 提供；
@@ -98,6 +98,7 @@ Gate A 只接受：`认可整版方向 / 需要修改 / 不采用`。正文确�
 
 - 任意 CLI 字符串被当作宿主身份或 task-record 时，在创建 Run 或恢复前停止；
 - Registry、Manifest、Run 索引、参考来源或 `method_root` 不可信时立即停止；
+- Registry 含多个客户且用户未选择时停止，不按顺序、最近使用时间或目录名猜测；
 - 同一 `task_key` 出现多个候选 Run 时 fail closed；
 - Gate A 修改根本改变任务身份时设置内部 `--task-identity-changed`，不得在原 Run 创建下一版方向；
 - 非法状态迁移、版本覆盖或客户身份变化时停止；
@@ -127,7 +128,7 @@ Gate A 只接受：`认可整版方向 / 需要修改 / 不采用`。正文确�
 ## 文件导航
 
 - `scripts/content_slim.py`：方向、Context Pack、正文、配套版本与三次真人确认的编排；
-- `runtime/client_registry.py`、`client_manifest.py`：客户定位与通用配置；
+- `runtime/client_registry.py`、`client_manifest.py`：默认配置位置、唯一客户选择与通用配置；
 - `runtime/run_store.py`、`state_machine.py`：锁、单 Run、正文/配套版本和状态；
 - `runtime/reference_prep.py`：1—5 篇参考的独立准备；
 - `runtime/vault_search.py`、`vault_reader.py`：Manifest 限定的 04 搜索/回读，以及 P3 授权 03 的局部检索和条件 05 回读；

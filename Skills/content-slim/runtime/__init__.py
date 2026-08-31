@@ -9,7 +9,14 @@ from .client_manifest import (
     resolve_speaker_mode,
     validate_manifest,
 )
-from .client_registry import ClientLocation, load_registry, resolve_client
+from .client_registry import (
+    ClientLocation,
+    default_registry_path,
+    default_runs_root,
+    load_registry,
+    resolve_client,
+    select_client_id,
+)
 from .error_model import SlimRuntimeError
 from .reference_prep import preflight_references, write_prepared_references
 from .run_store import RunStore
@@ -33,6 +40,8 @@ __all__ = [
     "SlimRuntimeError",
     "SlimStateMachine",
     "build_migration_candidate",
+    "default_registry_path",
+    "default_runs_root",
     "load_manifest",
     "load_registry",
     "preflight_references",
@@ -43,6 +52,7 @@ __all__ = [
     "resolve_speaker_mode",
     "search_method_assets",
     "search_knowledge_assets",
+    "select_client_id",
     "validate_analyzer_input",
     "validate_analyzer_result",
     "validate_content_context",

@@ -15,7 +15,13 @@ if str(SKILL_ROOT) not in sys.path:
     sys.path.insert(0, str(SKILL_ROOT))
 
 from runtime.client_manifest import load_manifest, resolve_asset_root, resolve_speaker_mode
-from runtime.client_registry import load_registry, resolve_client
+from runtime.client_registry import (
+    default_registry_path,
+    default_runs_root,
+    load_registry,
+    resolve_client,
+    select_client_id,
+)
 from runtime.error_model import SlimRuntimeError
 from runtime.reference_prep import (
     build_reference_index,
@@ -195,7 +201,7 @@ def prepare_direction_stage(
     *,
     registry_path: str | Path,
     runs_root: str | Path,
-    client_id: str,
+    client_id: str | None,
     speaker_mode: str | None,
     topic_original: str,
     reference_paths: list[str | Path],
@@ -212,14 +218,17 @@ def prepare_direction_stage(
         )
     prepared = preflight_references(reference_paths)
     registry = load_registry(registry_path)
-    location = resolve_client(registry, client_id)
-    manifest = load_manifest(location.manifest_path, expected_client_id=client_id)
+    resolved_client_id = select_client_id(registry, client_id)
+    location = resolve_client(registry, resolved_client_id)
+    manifest = load_manifest(
+        location.manifest_path, expected_client_id=resolved_client_id
+    )
     resolved_mode = resolve_speaker_mode(speaker_mode, manifest)
     method_root = resolve_asset_root(location.vault_root, manifest, "method")
     reference_index = build_reference_index(prepared)
     topic_normalized = _normalize_topic(topic_original)
     business_identity = {
-        "client_id": client_id,
+        "client_id": resolved_client_id,
         "speaker_mode": resolved_mode,
         "topic_original": topic_original,
         "reference_set_sha256": reference_index["reference_set_sha256"],
@@ -227,7 +236,7 @@ def prepare_direction_stage(
     store = RunStore(runs_root)
     state, created, task_key = store.start_program_task(
         business_identity=business_identity,
-        client_id=client_id,
+        client_id=resolved_client_id,
         speaker_mode=resolved_mode,
     )
     run_dir = store.run_directory(task_key)
@@ -247,7 +256,7 @@ def prepare_direction_stage(
         "topic_original": topic_original,
         "topic_normalized": topic_normalized,
         "topic_normalized_source": "system_generated",
-        "client_id": client_id,
+        "client_id": resolved_client_id,
         "speaker_mode": resolved_mode,
         "vault_root_resolved": str(location.vault_root),
         "manifest_path_resolved": str(location.manifest_path),
@@ -284,7 +293,7 @@ def prepare_direction_stage(
             "topic_original": topic_original,
             "topic_normalized": topic_normalized,
             "topic_normalized_source": "system_generated",
-            "client_id": client_id,
+            "client_id": resolved_client_id,
             "speaker_mode": resolved_mode,
             "user_thoughts": user_thoughts,
             "must_keep": must_keep,
@@ -1676,14 +1685,22 @@ def _status(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def _add_registry_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--registry", default=str(default_registry_path()))
+
+
+def _add_runs_root_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--runs-root", default=str(default_runs_root()))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Content V2 Slim runtime entry")
     subparsers = parser.add_subparsers(dest="operation", required=True)
 
     start = subparsers.add_parser("start", help="prepare one Run through Analyzer input")
-    start.add_argument("--registry", required=True)
-    start.add_argument("--runs-root", required=True)
-    start.add_argument("--client-id", required=True)
+    _add_registry_argument(start)
+    _add_runs_root_argument(start)
+    start.add_argument("--client-id")
     start.add_argument("--speaker-mode", choices=("personal_ip", "company_brand", "neutral"))
     start.add_argument("--topic-original", required=True)
     start.add_argument("--reference", action="append", required=True)
@@ -1693,14 +1710,14 @@ def build_parser() -> argparse.ArgumentParser:
     start.set_defaults(handler=_start)
 
     record = subparsers.add_parser("record-direction", help="internal: validate Analyzer result")
-    record.add_argument("--runs-root", required=True)
+    _add_runs_root_argument(record)
     record.add_argument("--task-record", required=True)
     record.add_argument("--analyzer-result", required=True)
     record.set_defaults(handler=_record_direction)
 
     respond = subparsers.add_parser("respond-direction", help="record the human Gate A choice")
-    respond.add_argument("--registry", required=True)
-    respond.add_argument("--runs-root", required=True)
+    _add_registry_argument(respond)
+    _add_runs_root_argument(respond)
     respond.add_argument("--task-record", required=True)
     respond.add_argument(
         "--decision", required=True, type=_normalize_decision, choices=GATE_A_CHOICES
@@ -1714,16 +1731,16 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_context = subparsers.add_parser(
         "prepare-context", help="internal: prepare the P3 semantic handoff"
     )
-    prepare_context.add_argument("--registry", required=True)
-    prepare_context.add_argument("--runs-root", required=True)
+    _add_registry_argument(prepare_context)
+    _add_runs_root_argument(prepare_context)
     prepare_context.add_argument("--task-record", required=True)
     prepare_context.set_defaults(handler=_prepare_context)
 
     record_context = subparsers.add_parser(
         "record-context", help="internal: validate and save the single Context Pack"
     )
-    record_context.add_argument("--registry", required=True)
-    record_context.add_argument("--runs-root", required=True)
+    _add_registry_argument(record_context)
+    _add_runs_root_argument(record_context)
     record_context.add_argument("--task-record", required=True)
     record_context.add_argument("--context-result", required=True)
     record_context.set_defaults(handler=_record_context)
@@ -1731,7 +1748,7 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_draft = subparsers.add_parser(
         "prepare-draft", help="internal: prepare the single-mode P4 Writer handoff"
     )
-    prepare_draft.add_argument("--runs-root", required=True)
+    _add_runs_root_argument(prepare_draft)
     prepare_draft.add_argument("--task-record", required=True)
     prepare_draft.add_argument("--feedback")
     prepare_draft.set_defaults(handler=_prepare_draft)
@@ -1739,7 +1756,7 @@ def build_parser() -> argparse.ArgumentParser:
     record_draft = subparsers.add_parser(
         "record-draft", help="internal: validate and save one draft version"
     )
-    record_draft.add_argument("--runs-root", required=True)
+    _add_runs_root_argument(record_draft)
     record_draft.add_argument("--task-record", required=True)
     record_draft.add_argument("--base-draft-version", required=True, type=int)
     record_draft.add_argument("--writer-result", required=True)
@@ -1749,7 +1766,7 @@ def build_parser() -> argparse.ArgumentParser:
     respond_draft_parser = subparsers.add_parser(
         "respond-draft", help="record the human body confirmation or revision choice"
     )
-    respond_draft_parser.add_argument("--runs-root", required=True)
+    _add_runs_root_argument(respond_draft_parser)
     respond_draft_parser.add_argument("--task-record", required=True)
     respond_draft_parser.add_argument(
         "--decision", required=True, type=_normalize_decision, choices=DRAFT_CHOICES
@@ -1760,7 +1777,7 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_package = subparsers.add_parser(
         "prepare-package", help="internal: prepare the confirmed-body P5 handoff"
     )
-    prepare_package.add_argument("--runs-root", required=True)
+    _add_runs_root_argument(prepare_package)
     prepare_package.add_argument("--task-record", required=True)
     prepare_package.add_argument("--feedback")
     prepare_package.set_defaults(handler=_prepare_package)
@@ -1768,7 +1785,7 @@ def build_parser() -> argparse.ArgumentParser:
     record_package = subparsers.add_parser(
         "record-package", help="internal: validate and save one publish-pack version"
     )
-    record_package.add_argument("--runs-root", required=True)
+    _add_runs_root_argument(record_package)
     record_package.add_argument("--task-record", required=True)
     record_package.add_argument("--base-package-version", required=True, type=int)
     record_package.add_argument("--package-result", required=True)
@@ -1778,8 +1795,8 @@ def build_parser() -> argparse.ArgumentParser:
     respond_package_parser = subparsers.add_parser(
         "respond-package", help="record the human package choice and save both files"
     )
-    respond_package_parser.add_argument("--registry", required=True)
-    respond_package_parser.add_argument("--runs-root", required=True)
+    _add_registry_argument(respond_package_parser)
+    _add_runs_root_argument(respond_package_parser)
     respond_package_parser.add_argument("--task-record", required=True)
     respond_package_parser.add_argument(
         "--decision", required=True, type=_normalize_decision, choices=PACKAGE_CHOICES
@@ -1790,7 +1807,7 @@ def build_parser() -> argparse.ArgumentParser:
     respond_package_parser.set_defaults(handler=_respond_package)
 
     status = subparsers.add_parser("status", help="read the current state")
-    status.add_argument("--runs-root", required=True)
+    _add_runs_root_argument(status)
     status.add_argument("--task-record", required=True)
     status.set_defaults(handler=_status)
     return parser

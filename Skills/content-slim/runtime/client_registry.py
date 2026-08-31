@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -20,6 +21,21 @@ class ClientLocation:
     client_id: str
     vault_root: Path
     manifest_path: Path
+
+
+def default_config_root() -> Path:
+    """Return the current Codex host's persistent Content Slim config root."""
+    configured = os.environ.get("CODEX_HOME")
+    host_root = Path(configured).expanduser() if configured else Path.home() / ".codex"
+    return host_root / ".content-v2-slim"
+
+
+def default_registry_path() -> Path:
+    return default_config_root() / "client-registry.json"
+
+
+def default_runs_root() -> Path:
+    return default_config_root() / "runs"
 
 
 def _safe_relative_path(value: Any) -> PurePosixPath:
@@ -56,6 +72,39 @@ def load_registry(path: str | Path) -> dict[str, Any]:
         raise SlimRuntimeError(
             "SLIM_REGISTRY_NOT_READABLE", "client_registry", detail=str(exc)
         ) from exc
+
+
+def select_client_id(
+    registry: dict[str, Any], requested_client_id: str | None = None
+) -> str:
+    """Use an explicit client or the only configured client; never guess."""
+    clients = registry.get("clients") if isinstance(registry, dict) else None
+    if not isinstance(clients, dict) or not clients:
+        raise SlimRuntimeError(
+            "SLIM_CLIENT_NOT_CONFIGURED",
+            "client_registry",
+            detail="registry has no configured clients",
+        )
+    if requested_client_id is not None:
+        if (
+            not isinstance(requested_client_id, str)
+            or not CLIENT_ID_PATTERN.fullmatch(requested_client_id)
+            or requested_client_id not in clients
+        ):
+            raise SlimRuntimeError(
+                "SLIM_CLIENT_NOT_CONFIGURED",
+                "client_registry",
+                detail="requested client is not present in the registry",
+            )
+        return requested_client_id
+    if len(clients) == 1:
+        return next(iter(clients))
+    raise SlimRuntimeError(
+        "SLIM_CLIENT_NOT_CONFIGURED",
+        "client_registry",
+        detail="multiple clients are configured and none was selected",
+        recovery_action="当前有多个客户配置，请明确选择一个客户后重试。",
+    )
 
 
 def resolve_client(registry: dict[str, Any], client_id: str) -> ClientLocation:
