@@ -1,7 +1,7 @@
 {
   "integrity": {
     "hash_algorithm": "sha256",
-    "normalized_mtime_epoch": 1788223588
+    "normalized_mtime_epoch": 1788224182
   },
   "package": {
     "id": "content-koubo-slim",
@@ -262,8 +262,8 @@
   },
   "schema_version": "content-koubo-slim-release-v1",
   "source": {
-    "commit": "d7ec8a41c29341240340560bc3a6797d19c38b6a",
+    "commit": "87881c50e05386cf75bd70a12dc4fb172dd55e5a",
     "selection_path": "packages/content-koubo-slim.json",
-    "tree": "3bb47900bf6a5fc5bc0db871723086680f0c4055"
+    "tree": "79147290a8b9f63ad56049ab9eea1c5a153d157d"
   }
 }
