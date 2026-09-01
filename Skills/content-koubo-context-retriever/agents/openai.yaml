@@ -1,0 +1,4 @@
+interface:
+  display_name: "Content 口播 Context"
+  short_description: "复用已确认的内容方法，按需装配客户业务知识和讲述者资料，形成唯一上下文包"
+  default_prompt: "使用 $content-koubo-context-retriever 将已批准方向、同版详细拆解蓝图和受控客户资料装配成唯一 Content Context Pack；详细蓝图不得被五组客户摘要替代。"

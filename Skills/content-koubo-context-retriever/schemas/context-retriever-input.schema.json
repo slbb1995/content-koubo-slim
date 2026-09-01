@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "content-koubo-slim/context-retriever-input.schema.json",
+  "title": "Content Context Retriever Input v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "context_version", "client_id", "speaker_mode", "task_input",
+    "approved_direction", "selected_external_reference_mechanisms",
+    "selected_04_assets", "business_context_needs", "knowledge_candidates",
+    "profile_candidate", "writer_mode", "secondary_tactics"
+  ],
+  "properties": {
+    "context_version": {"const": "slim-1.0"},
+    "client_id": {"type": "string", "minLength": 1},
+    "speaker_mode": {"enum": ["personal_ip", "company_brand", "neutral"]},
+    "task_input": {
+      "type": "object", "additionalProperties": false,
+      "required": ["topic_original", "user_thoughts", "must_keep", "must_avoid"],
+      "properties": {
+        "topic_original": {"type": "string", "minLength": 1},
+        "user_thoughts": {"type": ["string", "null"]},
+        "must_keep": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "must_avoid": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "approved_direction": {"type": "object"},
+    "selected_external_reference_mechanisms": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "selected_04_assets": {"type": "array", "maxItems": 5, "items": {"type": "object"}},
+    "business_context_needs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "knowledge_candidates": {"type": "array", "maxItems": 5, "items": {"type": "object"}},
+    "profile_candidate": {"type": ["object", "null"]},
+    "writer_mode": {"enum": ["ganhuo", "huati", "zhuanhua"]},
+    "secondary_tactics": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+  }
+}

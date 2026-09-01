@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://content-koubo-slim.invalid/schemas/analyzer-output.schema.json",
+  "title": "Content 口播 Slim Analyzer Output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "analysis_version",
+    "reference_analyses",
+    "selected_method_assets",
+    "fused_direction",
+    "content_goal",
+    "speaker_mode",
+    "writer_mode",
+    "writer_mode_reason",
+    "secondary_tactics",
+    "business_context_needs",
+    "customer_readable_direction"
+  ],
+  "properties": {
+    "analysis_version": {"const": "slim-1.0"},
+    "reference_analyses": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reference_id",
+          "content_value",
+          "hook_mechanism",
+          "structure_mechanism",
+          "transferable_points",
+          "prohibited_transfers"
+        ],
+        "properties": {
+          "reference_id": {"type": "string", "pattern": "^REF-[0-9]{3}$"},
+          "content_value": {"type": "string", "minLength": 1},
+          "hook_mechanism": {"type": "string", "minLength": 1},
+          "structure_mechanism": {"type": "string", "minLength": 1},
+          "transferable_points": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "prohibited_transfers": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    },
+    "selected_method_assets": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["asset_id", "asset_role", "relative_path", "page_sha256", "usage", "reason"],
+        "properties": {
+          "asset_id": {"type": "string", "minLength": 1},
+          "asset_role": {"enum": ["peer_content_asset", "oral_method_asset"]},
+          "relative_path": {"type": "string", "minLength": 1},
+          "page_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "usage": {"type": "string", "minLength": 1},
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "fused_direction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_audience",
+        "core_promise",
+        "external_reference_value",
+        "structure_plan",
+        "conflicts",
+        "user_boundaries",
+        "generalization_boundary"
+      ],
+      "properties": {
+        "target_audience": {"type": "string", "minLength": 1},
+        "core_promise": {"type": "string", "minLength": 1},
+        "external_reference_value": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "structure_plan": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["reference_ids", "issue", "resolution"],
+            "properties": {
+              "reference_ids": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"type": "string", "pattern": "^REF-[0-9]{3}$"}},
+              "issue": {"type": "string", "minLength": 1},
+              "resolution": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "user_boundaries": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["user_thoughts", "must_keep", "must_avoid"],
+          "properties": {
+            "user_thoughts": {"type": ["string", "null"]},
+            "must_keep": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+            "must_avoid": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+          }
+        },
+        "generalization_boundary": {"type": "string", "minLength": 1}
+      }
+    },
+    "content_goal": {"enum": ["explain", "discuss", "convert"]},
+    "speaker_mode": {"enum": ["personal_ip", "company_brand", "neutral"]},
+    "writer_mode": {"enum": ["ganhuo", "huati", "zhuanhua"]},
+    "writer_mode_reason": {"type": "string", "minLength": 1},
+    "secondary_tactics": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "business_context_needs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "customer_readable_direction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "original_topic",
+        "target_audience",
+        "core_promise",
+        "borrowed_value",
+        "method_asset_usage",
+        "oral_structure",
+        "user_boundaries",
+        "speaker_mode_explanation",
+        "writer_recommendation",
+        "generalization_boundary"
+      ],
+      "properties": {
+        "original_topic": {"type": "string", "minLength": 1},
+        "target_audience": {"type": "string", "minLength": 1},
+        "core_promise": {"type": "string", "minLength": 1},
+        "borrowed_value": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "method_asset_usage": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "oral_structure": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "user_boundaries": {"$ref": "#/$defs/user_boundaries"},
+        "speaker_mode_explanation": {"type": "string", "minLength": 1},
+        "writer_recommendation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "reason"],
+          "properties": {
+            "mode": {"enum": ["ganhuo", "huati", "zhuanhua"]},
+            "reason": {"type": "string", "minLength": 1}
+          }
+        },
+        "generalization_boundary": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "$defs": {
+    "user_boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["user_thoughts", "must_keep", "must_avoid"],
+      "properties": {
+        "user_thoughts": {"type": ["string", "null"]},
+        "must_keep": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "must_avoid": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    }
+  }
+}

@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
-"""Regenerate Content Slim runtime metadata and checksums."""
+"""Regenerate Content 口播 Slim runtime metadata and checksums."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 from pathlib import Path
-import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTENT_SKILLS = (
-    "content-analyzer",
-    "content-context-retriever",
-    "content-publish-pack",
-    "content-slim",
-    "content-writer",
+    "content-koubo-analyzer",
+    "content-koubo-context-retriever",
+    "content-koubo-publish-pack",
+    "content-koubo-slim",
+    "content-koubo-writer",
 )
 
 
@@ -53,20 +52,16 @@ def runtime_files() -> list[dict[str, object]]:
 def tree_sha256(files: list[dict[str, object]]) -> str:
     digest = hashlib.sha256()
     for item in files:
-        digest.update(f"{item['path']}\0{item['sha256']}\n".encode("utf-8"))
+        digest.update(
+            b"F\0"
+            + str(item["path"]).encode("utf-8")
+            + b"\0"
+            + str(item["mode"]).encode("ascii")
+            + b"\0"
+            + str(item["sha256"]).encode("ascii")
+            + b"\0"
+        )
     return digest.hexdigest()
-
-
-def base_commit() -> str:
-    completed = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    value = completed.stdout.strip()
-    return value if completed.returncode == 0 and value else "unknown"
 
 
 def main() -> int:
@@ -75,7 +70,15 @@ def main() -> int:
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     files = runtime_files()
     tree = tree_sha256(files)
-    manifest["package"] = {"id": "content-v2-slim", "version": version}
+    source = manifest.get("source", {})
+    if (
+        not isinstance(source.get("commit"), str)
+        or len(source["commit"]) != 40
+        or source.get("selection_path") != "packages/content-koubo-slim.json"
+    ):
+        raise SystemExit("release manifest lacks a valid Factory source binding")
+    manifest["schema_version"] = "content-koubo-slim-release-v1"
+    manifest["package"] = {"id": "content-koubo-slim", "version": version}
     manifest["runtime"] = {
         "file_count": len(files),
         "files": files,
@@ -84,11 +87,8 @@ def main() -> int:
         "skills": list(CONTENT_SKILLS),
         "tree_sha256": tree,
     }
-    manifest["source"] = {
-        "base_commit": base_commit(),
-        "selection_path": "Skills/",
-        "tree_sha256": tree,
-    }
+    manifest["source"] = source
+    manifest["integrity"] = {"hash_algorithm": "sha256"}
     manifest_path.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

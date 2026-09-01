@@ -3,7 +3,7 @@
   "clients": {
     "my-content": {
       "vault_root": "/ABSOLUTE/PATH/TO/YOUR-CONTENT-VAULT",
-      "manifest_relative_path": "workflow-config/content-client-manifest.json"
+      "manifest_relative_path": "workflow-config/content-koubo-client-manifest.json"
     }
   }
 }

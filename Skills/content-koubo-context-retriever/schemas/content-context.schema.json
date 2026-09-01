@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "content-koubo-slim/content-context.schema.json",
+  "title": "Content Context Pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "context_version", "client_id", "speaker_mode", "topic_original",
+    "target_audience", "approved_direction", "user_thoughts", "must_keep",
+    "must_avoid", "selected_external_reference_mechanisms",
+    "selected_04_content_assets", "selected_04_method_assets",
+    "selected_03_business_assets", "profile_context", "source_role_policy",
+    "writer_mode", "secondary_tactics"
+  ],
+  "properties": {
+    "context_version": {"const": "slim-1.0"},
+    "client_id": {"type": "string", "minLength": 1},
+    "speaker_mode": {"enum": ["personal_ip", "company_brand", "neutral"]},
+    "topic_original": {"type": "string", "minLength": 1},
+    "target_audience": {"type": "string", "minLength": 1},
+    "approved_direction": {"type": "object"},
+    "user_thoughts": {"type": ["string", "null"]},
+    "must_keep": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "must_avoid": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "selected_external_reference_mechanisms": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "selected_04_content_assets": {"type": "array", "items": {"type": "object"}},
+    "selected_04_method_assets": {"type": "array", "items": {"type": "object"}},
+    "selected_03_business_assets": {"type": "array", "maxItems": 5, "items": {"type": "object"}},
+    "profile_context": {"type": ["object", "null"]},
+    "source_role_policy": {"type": "object"},
+    "writer_mode": {"enum": ["ganhuo", "huati", "zhuanhua"]},
+    "secondary_tactics": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+  }
+}

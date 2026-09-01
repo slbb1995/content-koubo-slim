@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the standalone Content Slim release."""
+"""Verify the standalone Content 口播 Slim release."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTENT_SKILLS = {
-    "content-slim",
-    "content-analyzer",
-    "content-context-retriever",
-    "content-writer",
-    "content-publish-pack",
+    "content-koubo-slim",
+    "content-koubo-analyzer",
+    "content-koubo-context-retriever",
+    "content-koubo-writer",
+    "content-koubo-publish-pack",
 }
 
 
@@ -51,26 +51,36 @@ def verify_content() -> None:
         expected, relative = line.split(maxsplit=1)
         path = ROOT / relative.lstrip("* ")
         if not path.is_file() or path.is_symlink() or sha256(path) != expected:
-            raise RuntimeError(f"Content Slim checksum mismatch: {relative}")
+            raise RuntimeError(f"Content 口播 Slim checksum mismatch: {relative}")
 
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     manifest = json.loads(
         (ROOT / "release-manifest.json").read_text(encoding="utf-8")
     )
+    if manifest.get("schema_version") != "content-koubo-slim-release-v1":
+        raise RuntimeError("unexpected release manifest schema")
     if manifest.get("package") != {
-        "id": "content-v2-slim",
+        "id": "content-koubo-slim",
         "version": version,
     }:
         raise RuntimeError("release manifest and VERSION differ")
 
+    source = manifest.get("source", {})
+    if (
+        not isinstance(source.get("commit"), str)
+        or len(source["commit"]) != 40
+        or source.get("selection_path") != "packages/content-koubo-slim.json"
+    ):
+        raise RuntimeError("release manifest is not bound to the Factory source")
+
     runtime = manifest.get("runtime", {})
     files = runtime.get("files", [])
     if runtime.get("file_count") != 34 or len(files) != 34:
-        raise RuntimeError("Content Slim must contain exactly 34 runtime files")
+        raise RuntimeError("Content 口播 Slim must contain exactly 34 runtime files")
     if runtime.get("skill_count") != 5:
-        raise RuntimeError("Content Slim must contain exactly five skills")
+        raise RuntimeError("Content 口播 Slim must contain exactly five skills")
     if set(runtime.get("skills", [])) != CONTENT_SKILLS:
-        raise RuntimeError("unexpected Content Slim skill set")
+        raise RuntimeError("unexpected Content 口播 Slim skill set")
     if {item.get("skill") for item in files} != CONTENT_SKILLS:
         raise RuntimeError("runtime files contain an unexpected skill")
 
@@ -79,7 +89,7 @@ def verify_content() -> None:
     }
     if actual_skills != CONTENT_SKILLS:
         raise RuntimeError(
-            "repository must contain only the five Content Slim skills"
+            "repository must contain only the five Content 口播 Slim skills"
         )
     manifest_paths = {item["path"] for item in files}
     if len(manifest_paths) != len(files) or manifest_paths != runtime_paths():
@@ -94,19 +104,19 @@ def verify_content() -> None:
             or sha256(path) != item["sha256"]
         ):
             raise RuntimeError(
-                f"Content Slim manifest mismatch: {item['path']}"
+                f"Content 口播 Slim manifest mismatch: {item['path']}"
             )
 
     packages = ROOT / "Packages"
     if packages.exists() and any(packages.rglob("*")):
         raise RuntimeError(
-            "standalone Content Slim must not contain bundled packages"
+            "standalone Content 口播 Slim must not contain bundled packages"
         )
 
 
 def verify_examples_and_cli() -> None:
     sys.dont_write_bytecode = True
-    content_root = ROOT / "Skills" / "content-slim"
+    content_root = ROOT / "Skills" / "content-koubo-slim"
     sys.path.insert(0, str(content_root))
 
     from runtime.client_manifest import validate_manifest
@@ -114,7 +124,7 @@ def verify_examples_and_cli() -> None:
 
     manifest_data = json.loads(
         (
-            ROOT / "examples" / "content-client-manifest.example.json"
+            ROOT / "examples" / "content-koubo-client-manifest.example.json"
         ).read_text(encoding="utf-8")
     )
     validate_manifest(manifest_data, expected_client_id="my-content")
@@ -126,7 +136,7 @@ def verify_examples_and_cli() -> None:
         [
             sys.executable,
             "-B",
-            str(content_root / "scripts" / "content_slim.py"),
+            str(content_root / "scripts" / "content_koubo_slim.py"),
             "--help",
         ],
         cwd=ROOT,
@@ -137,9 +147,9 @@ def verify_examples_and_cli() -> None:
     )
     if (
         result.returncode != 0
-        or "Content V2 Slim runtime entry" not in result.stdout
+        or "Content 口播 Slim runtime entry" not in result.stdout
     ):
-        raise RuntimeError("Content Slim CLI smoke test failed")
+        raise RuntimeError("Content 口播 Slim CLI smoke test failed")
 
 
 def verify_no_generated_files() -> None:
@@ -173,7 +183,7 @@ def verify_tests() -> None:
     )
     if result.returncode != 0:
         raise RuntimeError(
-            "Content Slim tests failed:\n" + result.stdout + result.stderr
+            "Content 口播 Slim tests failed:\n" + result.stdout + result.stderr
         )
 
 
@@ -182,7 +192,7 @@ def main() -> int:
     verify_examples_and_cli()
     verify_tests()
     verify_no_generated_files()
-    print("PASS: standalone Content Slim 5 skills / 34 runtime files verified.")
+    print("PASS: standalone Content 口播 Slim 5 skills / 34 runtime files verified.")
     return 0
 
 
