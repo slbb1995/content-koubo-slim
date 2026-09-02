@@ -2,7 +2,7 @@
 
 Content 口播 Slim 是一套短视频口播内容工作流。
 
-它只做一件事：读取已经明确绑定的本地内容资料和 1—5 篇参考，依次完成方向、正文、配套文案三次真人确认，最终只保存两份 Markdown，并保持未发布。
+它只做一件事：从明确或已确认默认的 Obsidian 知识库中选择本次 IP，读取少量内容资料和 1—5 篇参考，依次完成方向、正文、配套文案三次真人确认，最终只保存两份 Markdown，并保持未发布。
 
 ## 仓库边界
 
@@ -50,7 +50,7 @@ Content 口播 Slim 是一套短视频口播内容工作流。
 
 | 版本 | Skill 数量 | 运行文件 | 状态 |
 |---|---:|---:|---|
-| 0.12.0-rc.1 | 5 | 34 | Content 口播 Slim 独立候选包 |
+| 1.0.0 | 5 | 以 release manifest 为准 | `content-source-v1` 多 IP 正式版 |
 
 ## 仓库结构
 
@@ -63,8 +63,11 @@ Skills/
 └── content-koubo-publish-pack/
 
 examples/
-├── client-registry.example.json
-└── content-koubo-client-manifest.example.json
+├── knowledge-base-registry.example.json
+├── content-source-manifest.example.json
+├── content-profile-index.example.json
+├── client-registry.example.json（旧 v2 兼容）
+└── content-koubo-client-manifest.example.json（旧 v2 兼容）
 
 tools/verify.py
 tools/build_release_manifest.py
@@ -112,41 +115,46 @@ python3 tools/verify.py
 
 ## 首次配置与自动绑定
 
-Content 口播 Slim 只读取用户明确配置的本地内容工作目录，不搜索整台电脑，也不会仅凭“安装了 Skill”就猜一个知识库。
+Content 口播 Slim 只读取用户明确配置或经过真人确认的 Obsidian 知识库，不搜索整台电脑，也不会仅凭“安装了 Skill”就猜一个知识库。
 
-它需要两份配置：
+新版公共合同有三份配置：
 
-1. **Client Manifest**：声明业务资料、内容方法、Profile 和输出目录；
-2. **Client Registry**：把 `client_id` 绑定到一个本地工作目录和对应 Manifest。
+1. **Knowledge Base Registry**：`~/.codex/.content-workflows/knowledge-base-registry.json`，按 `binding_id` 区分客户与知识库；
+2. **Content Source Manifest**：声明 03、04、05、06、07 和工作流输出；
+3. **Content Profile Index**：保存多个 active Profile 的稳定 ID、别名、对象引用和哈希。
 
-通用示例：
+公共合同示例：
 
-- `examples/content-koubo-client-manifest.example.json`
-- `examples/client-registry.example.json`
+- `examples/knowledge-base-registry.example.json`
+- `examples/content-source-manifest.example.json`
+- `examples/content-profile-index.example.json`
 
-推荐配置步骤：
+原有两个 v2 示例仅用于兼容旧客户配置。
 
-1. 准备一个明确的本地内容工作目录；
-2. 在目录中准备 Manifest 授权的四个子目录；
-3. 根据示例创建 `content-koubo-client-manifest.json`，也可以由遵守同一公开合同的上游配置工具生成；
-4. 在当前 AI 宿主的持久配置位置创建 `client-registry.json`；
-5. Registry 与 Manifest 的 `client_id` 必须完全一致；
-6. 回读 Registry、Manifest 和四个授权目录后，才能开始第一条 Run。
+只安装本仓库也能独立配置一个兼容知识库：
+
+```bash
+python3 Skills/content-koubo-slim/scripts/content_koubo_slim.py configure \
+  --vault /绝对路径/知识库
+```
+
+第一次只返回 `wrote=false` 预览和确认值。检查无误后，把返回值传给同一命令的 `--confirmation`；确认前不会创建 Manifest、Profile 索引或 Registry。
 
 Codex 默认使用：
 
 ~~~text
-~/.codex/.content-koubo-slim/client-registry.json
+~/.codex/.content-workflows/knowledge-base-registry.json
 ~/.codex/.content-koubo-slim/runs
 ~~~
 
 第一次运行时的判定规则是：
 
-- Registry 只有一条有效客户记录：直接采用并锁定该记录；
-- Registry 有多条有效记录：必须让用户明确选择；
-- Registry 缺失、无有效记录或无法回读：立即停止，不扫描电脑、不猜路径。
+- 本次明确选择 binding：采用该知识库；
+- 否则采用已确认的口播默认 binding；没有默认但只有一条兼容 binding 时采用；仍不唯一就要求选择；
+- `personal_ip` 按“本次明确指定 → 口播默认 → primary → 唯一 active → 要求选择”解析；
+- Feishu binding 明确停止：口播本轮只支持 Obsidian，不会降级到同步目录。
 
-所以，“自动锁定”成立的前提不是两个仓库的安装先后，而是新 Registry 和 Manifest 已经真实生成、且只有一个有效绑定。其他宿主必须使用自己的真实持久位置，不能照抄 Codex 路径。
+所以，“自动锁定”成立的前提不是仓库安装先后，而是 Registry、Manifest、Profile 索引已经真实生成并能唯一解析。primary 只是默认 IP，不是唯一可用 IP。
 
 ## 从旧版 Content Slim 迁移
 
@@ -193,13 +201,14 @@ Codex 默认使用：
 
 没有个人 Profile 时可以使用 `neutral` 模式，只根据本次参考和授权目录生成内容。
 
-`neutral` 模式仍然需要真实 Registry、Manifest、四个授权目录和 1—5 篇本地参考；它不是无配置运行模式。
+`neutral` 模式仍然需要真实 Registry、Manifest、授权目录和 1—5 篇本地参考；它不是无配置运行模式。
 
 ## 更新与安全边界
 
 - 更新前重新运行 `python3 tools/verify.py`；
 - 同名 Skill 目录不得静默覆盖；
-- Registry、Manifest、参考来源或当前 Run 不可信时立即停止；
+- Registry、Manifest、Profile 索引、参考来源或当前 Run 不可信时立即停止；
+- Gate 后任何已冻结 03/04/05 资料或绑定哈希变化，保留旧产物并停止；
 - 参考内容只提炼可迁移机制，不冒充自己的身份、案例、数据或承诺；
 - 方向、正文、配套三个真人确认不能由程序或 Agent 代替；
 - 保存不等于发布，本仓库没有自动发布能力。

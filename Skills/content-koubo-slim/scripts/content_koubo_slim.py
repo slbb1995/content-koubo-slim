@@ -16,11 +16,16 @@ if str(SKILL_ROOT) not in sys.path:
 
 from runtime.client_manifest import load_manifest, resolve_asset_root, resolve_speaker_mode
 from runtime.client_registry import (
-    default_registry_path,
     default_runs_root,
-    load_registry,
+    load_effective_registry,
     resolve_client,
     select_client_id,
+)
+from runtime.content_source import (
+    apply_obsidian_configuration,
+    load_profile_index,
+    plan_obsidian_configuration,
+    select_profile,
 )
 from runtime.error_model import SlimRuntimeError
 from runtime.reference_prep import (
@@ -45,7 +50,12 @@ from runtime.schema_validation import (
 )
 from runtime.state_machine import SlimStateMachine
 from runtime.vault_save import save_markdown_pair
-from runtime.vault_reader import read_method_asset, read_primary_profile
+from runtime.vault_reader import (
+    read_knowledge_asset,
+    read_method_asset,
+    read_primary_profile,
+    read_selected_profile,
+)
 from runtime.vault_search import search_knowledge_assets, search_method_assets
 
 
@@ -162,6 +172,8 @@ def _verify_frozen_client_location(
     *,
     vault_root: Path,
     manifest_path: Path,
+    binding_id: str | None = None,
+    registry_sha256: str | None = None,
     workflow_stage: str = "正在准备客户内容资料",
 ) -> None:
     """Keep every stage of one Run bound to the client location used at start."""
@@ -169,11 +181,29 @@ def _verify_frozen_client_location(
     if (
         frozen.get("vault_root_resolved") != str(vault_root)
         or frozen.get("manifest_path_resolved") != str(manifest_path)
+        or frozen.get("binding_id") is not None and frozen.get("binding_id") != binding_id
+        or frozen.get("registry_sha256") is not None and frozen.get("registry_sha256") != registry_sha256
     ):
         raise SlimRuntimeError(
             "SLIM_TASK_IDENTITY_CHANGED",
             "content_koubo_slim",
             detail="current registry no longer matches the Run's frozen client location",
+            workflow_stage=workflow_stage,
+            run_exists=True,
+            artifacts_exist=True,
+            artifacts_preserved=True,
+        )
+
+
+def _verify_frozen_manifest(
+    frozen: dict[str, Any], manifest: Any, *, workflow_stage: str
+) -> None:
+    expected = frozen.get("manifest_sha256")
+    if expected is not None and manifest.manifest_sha256 != expected:
+        raise SlimRuntimeError(
+            "SLIM_TASK_IDENTITY_CHANGED",
+            "content_koubo_slim",
+            detail="Manifest changed after this Run was frozen",
             workflow_stage=workflow_stage,
             run_exists=True,
             artifacts_exist=True,
@@ -199,7 +229,7 @@ def _analyzer_input_version(
 
 def prepare_direction_stage(
     *,
-    registry_path: str | Path,
+    registry_path: str | Path | None,
     runs_root: str | Path,
     client_id: str | None,
     speaker_mode: str | None,
@@ -208,6 +238,8 @@ def prepare_direction_stage(
     user_thoughts: str | None,
     must_keep: list[str],
     must_avoid: list[str],
+    binding_id: str | None = None,
+    profile: str | None = None,
 ) -> tuple[dict[str, Any], str]:
     if not isinstance(topic_original, str) or not topic_original.strip():
         raise SlimRuntimeError(
@@ -217,14 +249,44 @@ def prepare_direction_stage(
             workflow_stage="正在准备参考",
         )
     prepared = preflight_references(reference_paths)
-    registry = load_registry(registry_path)
-    resolved_client_id = select_client_id(registry, client_id)
-    location = resolve_client(registry, resolved_client_id)
+    registry = load_effective_registry(registry_path)
+    selected_binding = select_client_id(
+        registry, client_id, requested_binding_id=binding_id
+    )
+    location = resolve_client(registry, selected_binding)
+    resolved_client_id = location.client_id
     manifest = load_manifest(
         location.manifest_path, expected_client_id=resolved_client_id
     )
+    if location.knowledge_base_id is not None and manifest.knowledge_base_id != location.knowledge_base_id:
+        raise SlimRuntimeError(
+            "SLIM_MANIFEST_INVALID", "content_koubo_slim", detail="Registry and Manifest knowledge_base_id differ"
+        )
     resolved_mode = resolve_speaker_mode(speaker_mode, manifest)
     method_root = resolve_asset_root(location.vault_root, manifest, "method")
+    selected_profile: dict[str, Any] | None = None
+    profile_index_sha256: str | None = None
+    if resolved_mode == "personal_ip":
+        if location.common_contract:
+            if location.profile_index_path is None or manifest.knowledge_base_id is None:
+                raise SlimRuntimeError("SLIM_PROFILE_INVALID", "content_koubo_slim", detail="common Profile index is missing")
+            index, profile_index_sha256 = load_profile_index(
+                location.profile_index_path, knowledge_base_id=manifest.knowledge_base_id
+            )
+            selected_profile = select_profile(
+                index,
+                requested=profile,
+                configured_default=location.default_profile_id,
+            )
+            profile_root = resolve_asset_root(location.vault_root, manifest, "profile")
+            read_selected_profile(profile_root, selected_profile)
+        elif profile is not None:
+            raise SlimRuntimeError(
+                "SLIM_PROFILE_INVALID",
+                "content_koubo_slim",
+                detail="legacy v2 configuration only supports its active primary Profile",
+                recovery_action="请先运行 configure 迁移到通用合同，再选择任意 IP。",
+            )
     reference_index = build_reference_index(prepared)
     topic_normalized = _normalize_topic(topic_original)
     business_identity = {
@@ -233,6 +295,13 @@ def prepare_direction_stage(
         "topic_original": topic_original,
         "reference_set_sha256": reference_index["reference_set_sha256"],
     }
+    if location.common_contract:
+        business_identity.update(
+            {
+                "binding_id": location.binding_id,
+                "profile_id": selected_profile["profile_id"] if selected_profile else None,
+            }
+        )
     store = RunStore(runs_root)
     state, created, task_key = store.start_program_task(
         business_identity=business_identity,
@@ -276,6 +345,21 @@ def prepare_direction_stage(
         "task_key_record": state["task_key_record"],
         "task_key_retry_policy": state["task_key_retry_policy"],
     }
+    if location.common_contract:
+        frozen_input.update(
+            {
+                "binding_id": location.binding_id,
+                "knowledge_base_id": location.knowledge_base_id,
+                "profile_id": selected_profile["profile_id"] if selected_profile else None,
+                "profile_ref": selected_profile["object_ref"] if selected_profile else None,
+                "profile_sha256": selected_profile["content_sha256"] if selected_profile else None,
+                "profile_display_name": selected_profile["display_name"] if selected_profile else None,
+                "profile_index_path_resolved": str(location.profile_index_path) if location.profile_index_path else None,
+                "profile_index_sha256": profile_index_sha256,
+                "manifest_sha256": manifest.manifest_sha256,
+                "registry_sha256": location.registry_sha256,
+            }
+        )
     store.freeze_task_input(task_key, frozen_input)
     candidates = search_method_assets(
         method_root,
@@ -640,16 +724,19 @@ def prepare_context_stage(
     )
     writer_reference_blueprint = build_writer_reference_blueprint(analyzer_result)
 
-    registry = load_registry(registry_path)
-    location = resolve_client(registry, frozen["client_id"])
+    registry = load_effective_registry(registry_path)
+    location = resolve_client(registry, frozen.get("binding_id") or frozen["client_id"])
     _verify_frozen_client_location(
         frozen,
         vault_root=location.vault_root,
         manifest_path=location.manifest_path,
+        binding_id=location.binding_id,
+        registry_sha256=location.registry_sha256,
     )
     manifest = load_manifest(
         location.manifest_path, expected_client_id=frozen["client_id"]
     )
+    _verify_frozen_manifest(frozen, manifest, workflow_stage="正在准备客户内容资料")
     resolved_mode = resolve_speaker_mode(frozen["speaker_mode"], manifest)
     method_root = resolve_asset_root(location.vault_root, manifest, "method")
     selected_04_assets: list[dict[str, Any]] = []
@@ -690,7 +777,43 @@ def prepare_context_stage(
     profile_candidate: dict[str, Any] | None = None
     if resolved_mode == "personal_ip":
         profile_root = resolve_asset_root(location.vault_root, manifest, "profile")
-        profile = read_primary_profile(profile_root, manifest.profile_selector)
+        if location.common_contract:
+            if location.profile_index_path is None or manifest.knowledge_base_id is None:
+                raise SlimRuntimeError("SLIM_PROFILE_INVALID", "content_koubo_slim", detail="common Profile index is missing")
+            index, index_sha256 = load_profile_index(
+                location.profile_index_path, knowledge_base_id=manifest.knowledge_base_id
+            )
+            if index_sha256 != frozen.get("profile_index_sha256"):
+                raise SlimRuntimeError(
+                    "SLIM_TASK_IDENTITY_CHANGED",
+                    "content_koubo_slim",
+                    detail="Profile index changed after this Run was frozen",
+                    workflow_stage="正在准备客户内容资料",
+                    run_exists=True,
+                    artifacts_exist=True,
+                    artifacts_preserved=True,
+                )
+            selected = select_profile(
+                index,
+                requested=frozen.get("profile_id"),
+                configured_default=None,
+            )
+            if (
+                selected.get("object_ref") != frozen.get("profile_ref")
+                or selected.get("content_sha256") != frozen.get("profile_sha256")
+            ):
+                raise SlimRuntimeError(
+                    "SLIM_TASK_IDENTITY_CHANGED",
+                    "content_koubo_slim",
+                    detail="selected Profile changed after this Run was frozen",
+                    workflow_stage="正在准备客户内容资料",
+                    run_exists=True,
+                    artifacts_exist=True,
+                    artifacts_preserved=True,
+                )
+            profile = read_selected_profile(profile_root, selected)
+        else:
+            profile = read_primary_profile(profile_root, manifest.profile_selector)
         profile_candidate = {
             "relative_path": profile.relative_path,
             "page_sha256": profile.page_sha256,
@@ -750,6 +873,26 @@ def record_context_result(
             artifacts_preserved=store.artifacts_exist(task_key),
         )
     validated = validate_content_context(context_result, context_input)
+    source_snapshot = {
+        "contract_version": "content-koubo-slim-source-snapshot-v1",
+        "methods": [
+            {"relative_path": item["relative_path"], "page_sha256": item["page_sha256"]}
+            for item in context_input["selected_04_assets"]
+        ],
+        "knowledge": [
+            {"relative_path": item["relative_path"], "page_sha256": item["page_sha256"]}
+            for item in context_input["knowledge_candidates"]
+        ],
+        "profile": (
+            {
+                "relative_path": context_input["profile_candidate"]["relative_path"],
+                "page_sha256": context_input["profile_candidate"]["page_sha256"],
+            }
+            if context_input["profile_candidate"] is not None
+            else None
+        ),
+    }
+    store.write_fixed_json(task_key, "source_snapshot_v1.json", source_snapshot)
     path = store.write_fixed_json(task_key, "content_context_v1.json", validated)
     store.transition(task_key, "context_ready")
     response = {
@@ -1213,6 +1356,47 @@ def _package_markdown(approval: dict[str, Any], content: dict[str, Any]) -> str:
     )
 
 
+def _verify_source_snapshot_before_save(
+    *, store: RunStore, task_key: str, frozen: dict[str, Any], location: Any, manifest: Any
+) -> None:
+    if "manifest_sha256" not in frozen:
+        # Pre-v3 Runs keep their original behavior and remain resumable.
+        return
+    snapshot = store.read_fixed_json(task_key, "source_snapshot_v1.json")
+    if snapshot.get("contract_version") != "content-koubo-slim-source-snapshot-v1":
+        raise SlimRuntimeError(
+            "SLIM_TASK_IDENTITY_CHANGED", "content_koubo_slim", detail="source snapshot is invalid",
+            workflow_stage="等待你确认并保存", run_exists=True, artifacts_exist=True, artifacts_preserved=True,
+        )
+    method_root = resolve_asset_root(location.vault_root, manifest, "method")
+    for item in snapshot.get("methods", []):
+        read_method_asset(method_root, item["relative_path"], expected_sha256=item["page_sha256"])
+    knowledge_root = resolve_asset_root(location.vault_root, manifest, "knowledge")
+    for item in snapshot.get("knowledge", []):
+        read_knowledge_asset(knowledge_root, item["relative_path"], expected_sha256=item["page_sha256"])
+    profile_snapshot = snapshot.get("profile")
+    if profile_snapshot is not None:
+        profile_root = resolve_asset_root(location.vault_root, manifest, "profile")
+        if location.common_contract:
+            index, index_sha256 = load_profile_index(
+                location.profile_index_path, knowledge_base_id=manifest.knowledge_base_id
+            )
+            if index_sha256 != frozen.get("profile_index_sha256"):
+                raise SlimRuntimeError(
+                    "SLIM_TASK_IDENTITY_CHANGED", "content_koubo_slim", detail="Profile index changed after Gate A",
+                    workflow_stage="等待你确认并保存", run_exists=True, artifacts_exist=True, artifacts_preserved=True,
+                )
+            selected = select_profile(index, requested=frozen.get("profile_id"), configured_default=None)
+            profile = read_selected_profile(profile_root, selected)
+        else:
+            profile = read_primary_profile(profile_root, manifest.profile_selector)
+        if profile.relative_path != profile_snapshot.get("relative_path") or profile.page_sha256 != profile_snapshot.get("page_sha256"):
+            raise SlimRuntimeError(
+                "SLIM_TASK_IDENTITY_CHANGED", "content_koubo_slim", detail="Profile changed after Gate A",
+                workflow_stage="等待你确认并保存", run_exists=True, artifacts_exist=True, artifacts_preserved=True,
+            )
+
+
 def _save_approved_package(
     *,
     registry_path: str | Path,
@@ -1259,22 +1443,32 @@ def _save_approved_package(
                 artifacts_preserved=True,
             )
 
-        registry = load_registry(registry_path)
-        location = resolve_client(registry, frozen["client_id"])
+        registry = load_effective_registry(registry_path)
+        location = resolve_client(registry, frozen.get("binding_id") or frozen["client_id"])
         _verify_frozen_client_location(
             frozen,
             vault_root=location.vault_root,
             manifest_path=location.manifest_path,
+            binding_id=location.binding_id,
+            registry_sha256=location.registry_sha256,
             workflow_stage="等待你确认并保存",
         )
         manifest = load_manifest(
             location.manifest_path, expected_client_id=frozen["client_id"]
         )
+        _verify_frozen_manifest(frozen, manifest, workflow_stage="等待你确认并保存")
+        _verify_source_snapshot_before_save(
+            store=store,
+            task_key=task_key,
+            frozen=frozen,
+            location=location,
+            manifest=manifest,
+        )
         output_root = resolve_asset_root(location.vault_root, manifest, "output")
         save_markdown_pair(
             output_root=output_root,
             output_template=manifest.output_template,
-            client_id=frozen["client_id"],
+            client_id=frozen.get("profile_id") or frozen["client_id"],
             selected_publish_title=approval["selected_publish_title"],
             oral_body=approved_draft["body"],
             package_markdown=_package_markdown(approval, content),
@@ -1448,8 +1642,31 @@ def _start(args: argparse.Namespace) -> dict[str, Any]:
         user_thoughts=args.user_thoughts,
         must_keep=args.must_keep,
         must_avoid=args.must_avoid,
+        binding_id=args.binding_id,
+        profile=args.profile,
     )
     return response
+
+
+def _configure(args: argparse.Namespace) -> dict[str, Any]:
+    if args.confirmation:
+        return apply_obsidian_configuration(
+            args.vault,
+            confirmation=args.confirmation,
+            registry_path=args.registry,
+            client_id=args.client_id,
+        )
+    plan = plan_obsidian_configuration(
+        args.vault,
+        registry_path=args.registry,
+        client_id=args.client_id,
+    )
+    return {
+        "status": "confirmation_required",
+        "message": "配置预览已生成；当前零写入。确认后才创建清单并登记知识库。",
+        "preview": plan["preview"],
+        "confirmation": plan["confirmation"],
+    }
 
 
 def _record_direction(args: argparse.Namespace) -> dict[str, Any]:
@@ -1483,19 +1700,22 @@ def _record_direction(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _respond_direction(args: argparse.Namespace) -> dict[str, Any]:
-    registry = load_registry(args.registry)
+    registry = load_effective_registry(args.registry)
     store = RunStore(args.runs_root)
     task_key = _task_key_from_record(store, args.task_record)
     frozen = store.read_task_input(task_key)
-    location = resolve_client(registry, frozen["client_id"])
+    location = resolve_client(registry, frozen.get("binding_id") or frozen["client_id"])
     _verify_frozen_client_location(
         frozen,
         vault_root=location.vault_root,
         manifest_path=location.manifest_path,
+        binding_id=location.binding_id,
+        registry_sha256=location.registry_sha256,
     )
     manifest = load_manifest(
         location.manifest_path, expected_client_id=frozen["client_id"]
     )
+    _verify_frozen_manifest(frozen, manifest, workflow_stage="等待你确认方向")
     method_root = resolve_asset_root(location.vault_root, manifest, "method")
     response, _ = respond_direction(
         store=store,
@@ -1686,7 +1906,7 @@ def _status(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _add_registry_argument(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--registry", default=str(default_registry_path()))
+    parser.add_argument("--registry", default=None)
 
 
 def _add_runs_root_argument(parser: argparse.ArgumentParser) -> None:
@@ -1697,10 +1917,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Content 口播 Slim runtime entry")
     subparsers = parser.add_subparsers(dest="operation", required=True)
 
+    configure = subparsers.add_parser("configure", help="preview or confirm one Obsidian binding")
+    configure.add_argument("--vault", required=True, type=Path)
+    configure.add_argument("--registry")
+    configure.add_argument("--client-id")
+    configure.add_argument("--confirmation")
+    configure.set_defaults(handler=_configure)
+
     start = subparsers.add_parser("start", help="prepare one Run through Analyzer input")
     _add_registry_argument(start)
     _add_runs_root_argument(start)
     start.add_argument("--client-id")
+    start.add_argument("--binding-id")
+    start.add_argument("--profile", help="active Profile id, display name, or unique alias")
     start.add_argument("--speaker-mode", choices=("personal_ip", "company_brand", "neutral"))
     start.add_argument("--topic-original", required=True)
     start.add_argument("--reference", action="append", required=True)

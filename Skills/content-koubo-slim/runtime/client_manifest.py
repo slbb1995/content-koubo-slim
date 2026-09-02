@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .client_registry import CLIENT_ID_PATTERN
+from .content_source import CONTRACT_VERSION as COMMON_CONTRACT_VERSION, WORKFLOW, validate_common_manifest
 from .error_model import SlimRuntimeError
 
 
@@ -36,6 +38,10 @@ class ClientManifest:
     profile_selector: dict[str, Any]
     default_platform: str
     output_template: str
+    knowledge_base_id: str | None = None
+    profile_index_ref: str | None = None
+    common_contract: bool = False
+    manifest_sha256: str | None = None
 
     def requires_profile(self, speaker_mode: str) -> bool:
         return speaker_mode in self.profile_required_when
@@ -52,6 +58,30 @@ def _relative_path(value: Any, field: str) -> str:
 
 def validate_manifest(data: Any, expected_client_id: str | None = None) -> ClientManifest:
     try:
+        if isinstance(data, dict) and data.get("contract_version") == COMMON_CONTRACT_VERSION:
+            value = validate_common_manifest(data)
+            client_id = value["client_id"]
+            if expected_client_id is not None and client_id != expected_client_id:
+                raise ValueError("registry and manifest client ids differ")
+            roots = value["asset_roots"]
+            return ClientManifest(
+                client_id=client_id,
+                asset_roots={
+                    "knowledge": roots["knowledge"],
+                    "method": roots["content"],
+                    "profile": roots["profiles"],
+                    "output": roots["output"],
+                },
+                default_speaker_mode="personal_ip",
+                allowed_speaker_modes=SUPPORTED_SPEAKER_MODES,
+                profile_required_when=("personal_ip",),
+                profile_selector={"status": "active"},
+                default_platform="short_video",
+                output_template=value["workflow_outputs"][WORKFLOW],
+                knowledge_base_id=value["knowledge_base_id"],
+                profile_index_ref=value["profile_index_ref"],
+                common_contract=True,
+            )
         if not isinstance(data, dict) or set(data) != MANIFEST_FIELDS:
             raise ValueError("unexpected manifest fields")
         if data["contract_version"] != "2.0":
@@ -113,12 +143,16 @@ def validate_manifest(data: Any, expected_client_id: str | None = None) -> Clien
 
 def load_manifest(path: str | Path, expected_client_id: str | None = None) -> ClientManifest:
     try:
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        raw = Path(path).read_bytes()
+        data = json.loads(raw.decode("utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise SlimRuntimeError(
             "SLIM_MANIFEST_INVALID", "client_manifest", detail=str(exc)
         ) from exc
-    return validate_manifest(data, expected_client_id)
+    manifest = validate_manifest(data, expected_client_id)
+    return ClientManifest(
+        **{**manifest.__dict__, "manifest_sha256": hashlib.sha256(raw).hexdigest()}
+    )
 
 
 def resolve_speaker_mode(requested: str | None, manifest: ClientManifest) -> str:

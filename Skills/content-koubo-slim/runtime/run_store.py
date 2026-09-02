@@ -62,13 +62,14 @@ class RunStore:
 
     @staticmethod
     def _business_identity_digest(business_identity: dict[str, Any]) -> str:
-        required = {
+        legacy_required = {
             "client_id",
             "speaker_mode",
             "topic_original",
             "reference_set_sha256",
         }
-        if not isinstance(business_identity, dict) or set(business_identity) != required:
+        common_required = legacy_required | {"binding_id", "profile_id"}
+        if not isinstance(business_identity, dict) or frozenset(business_identity) not in {frozenset(legacy_required), frozenset(common_required)}:
             raise SlimRuntimeError(
                 "SLIM_TASK_KEY_UNTRUSTED",
                 "run_store",
@@ -82,6 +83,15 @@ class RunStore:
                     "run_store",
                     detail=f"frozen business identity {field} is invalid",
                 )
+        if set(business_identity) == common_required:
+            for field in ("binding_id", "profile_id"):
+                value = business_identity[field]
+                if value is not None and (not isinstance(value, str) or not value.strip()):
+                    raise SlimRuntimeError(
+                        "SLIM_TASK_KEY_UNTRUSTED",
+                        "run_store",
+                        detail=f"frozen business identity {field} is invalid",
+                    )
         reference_hash = business_identity["reference_set_sha256"]
         if not isinstance(reference_hash, str) or not TASK_DIGEST_PATTERN.fullmatch(
             reference_hash
@@ -105,12 +115,18 @@ class RunStore:
         """Create or reuse a deterministic task record from frozen business identity."""
 
         identity_digest = self._business_identity_digest(business_identity)
+        record_version = (
+            "content-koubo-slim-task-key-v3"
+            if {"binding_id", "profile_id"}.issubset(business_identity)
+            else "content-koubo-slim-task-key-v2"
+        )
+        prefix = record_version.encode("ascii") + b"\0"
         task_key = hashlib.sha256(
-            b"content-koubo-slim-task-key-v2\0" + identity_digest.encode("ascii")
+            prefix + identity_digest.encode("ascii")
         ).hexdigest()
         record_relative = f"{TASK_KEY_DIRECTORY}/{identity_digest}.json"
         record = {
-            "contract_version": "content-koubo-slim-task-key-v2",
+            "contract_version": record_version,
             "business_identity_sha256": identity_digest,
             "task_key": task_key,
             "generated_by": "deterministic_program",
@@ -136,6 +152,16 @@ class RunStore:
                     )
                 existing = self._read_json(record_path)
                 if existing != record:
+                    legacy_key = hashlib.sha256(
+                        b"content-koubo-slim-task-key-v2\0" + identity_digest.encode("ascii")
+                    ).hexdigest()
+                    legacy = {
+                        **record,
+                        "contract_version": "content-koubo-slim-task-key-v2",
+                        "task_key": legacy_key,
+                    }
+                    if existing == legacy:
+                        return legacy_key, record_relative
                     raise SlimRuntimeError(
                         "SLIM_RUN_STORE_INVALID",
                         "run_store",
@@ -177,12 +203,18 @@ class RunStore:
             "retry_policy",
         }
         identity_digest = Path(record_relative).stem
+        contract_version = record.get("contract_version")
+        prefixes = {
+            "content-koubo-slim-task-key-v2": b"content-koubo-slim-task-key-v2\0",
+            "content-koubo-slim-task-key-v3": b"content-koubo-slim-task-key-v3\0",
+        }
+        prefix = prefixes.get(contract_version)
         expected_task_key = hashlib.sha256(
-            b"content-koubo-slim-task-key-v2\0" + identity_digest.encode("ascii")
+            (prefix or b"invalid\0") + identity_digest.encode("ascii")
         ).hexdigest()
         if (
             set(record) != expected_fields
-            or record["contract_version"] != "content-koubo-slim-task-key-v2"
+            or contract_version not in prefixes
             or record["business_identity_sha256"] != identity_digest
             or record["task_key"] != expected_task_key
             or record["generated_by"] != "deterministic_program"

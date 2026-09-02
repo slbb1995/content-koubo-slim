@@ -648,7 +648,7 @@ def validate_context_retriever_input(value: Any) -> dict[str, Any]:
             "title",
             "content",
         }:
-            _fail(code, "personal_ip requires one primary profile", workflow_stage=stage)
+            _fail(code, "personal_ip requires one selected frozen Profile", workflow_stage=stage)
         _relative_markdown(profile["relative_path"], "profile path", code=code)
         if not isinstance(profile["page_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", profile["page_sha256"]):
             _fail(code, "profile hash is invalid", workflow_stage=stage)
@@ -777,7 +777,7 @@ def validate_content_context(
             _fail(code, "profile selected_passages must contain 1 to 8 items", workflow_stage=stage)
         source_profile = _normalized_phrase(candidate_profile["content"])
         if any(_normalized_phrase(item) not in source_profile for item in passages):
-            _fail(code, "profile context contains a passage not found in the primary profile", workflow_stage=stage)
+            _fail(code, "profile context contains a passage not found in the selected Profile", workflow_stage=stage)
         _nonempty(profile["usage"], "profile usage", code=code)
     elif profile is not None:
         _fail(code, "non-personal context must not include profile_context", workflow_stage=stage)

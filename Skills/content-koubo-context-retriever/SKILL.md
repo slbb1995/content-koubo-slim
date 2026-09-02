@@ -1,6 +1,6 @@
 ---
 name: content-koubo-context-retriever
-description: Content 口播 Slim 的 Gate A 后客户上下文装配 Skill。用于同一 Run 已批准方向并冻结 04、business_context_needs、speaker_mode 与 Writer 模式后，复用已选 04、按需筛选 03、在 personal_ip 模式读取唯一主 Profile，生成一份 Content Context Pack。不得重搜 04、改变方向、调用 Writer、写正文或进入 P4。
+description: Content 口播 Slim 的 Gate A 后客户上下文装配 Skill。用于同一 Run 已批准方向并冻结 04、business_context_needs、speaker_mode 与 Writer 模式后，复用已选 04、按需筛选 03、在 personal_ip 模式读取该 Run 已明确选定并冻结的 Profile，生成一份 Content Context Pack。不得重搜 04、改变方向、调用 Writer、写正文或进入 P4。
 ---
 
 # Content Context Retriever
@@ -15,7 +15,7 @@ description: Content 口播 Slim 的 Gate A 后客户上下文装配 Skill。用
 - 必须保持 Gate A 冻结的受众、承诺、结构、`speaker_mode` 和 Writer 主模式；
 - 04 只用输入中的 P2 已选资产，不搜索、不替换、不增加；
 - 03 只从输入的 0—5 张候选中选择；没有相关 03 时可为空；
-- `personal_ip` 必须使用输入中的唯一主 Profile；`company_brand` 和 `neutral` 的 Profile 必须为空；
+- `personal_ip` 必须使用输入中已为本 Run 选定并冻结的单个 Profile；它可以是任意 active Profile，`primary` 只负责默认选择；`company_brand` 和 `neutral` 的 Profile 必须为空；
 - 不创建 Run、状态、版本、收据、第二层 Pack、Reviewer 或临时程序。
 
 ## 输入
@@ -42,7 +42,7 @@ description: Content 口播 Slim 的 Gate A 后客户上下文装配 Skill。用
 2. 把所有已选 `peer_content_asset` 放入 `selected_04_content_assets`，把所有已选 `oral_method_asset` 放入 `selected_04_method_assets`；
 3. 对每张 04 只保留批准用途，并给出一般化后的 `writer_context`；不得转移同行身份、经历、案例、公司业务、专属数据或识别性原句；
 4. 从 03 候选中只选真正支持批准方向的页面，保留程序提供的原文局部片段并说明用途；没有相关项时输出空数组；
-5. `personal_ip` 从唯一 Profile 中提取少量逐字可回溯片段并说明用途；保持本人事实、项目设定和候选素材边界。另两种模式输出 `profile_context: null`；
+5. `personal_ip` 从本 Run 已冻结的选定 Profile 中提取少量逐字可回溯片段并说明用途；保持本人事实、项目设定和候选素材边界。另两种模式输出 `profile_context: null`；
 6. 写入固定 `source_role_policy`，删除重复和无关内容，返回唯一 JSON 对象。
 
 ## 来源角色
@@ -56,7 +56,7 @@ P3 不新增真人确认点。Gate A 已完成；本 Skill 生成 Context Pack �
 ## 错误与停止
 
 - Gate A 未批准、输入来源错绑、04 漂移或要求重搜 04 时停止；
-- `personal_ip` 缺 Profile 或 Profile 不唯一时停止；另两种模式不因 05 为空阻断；
+- `personal_ip` 缺少已选 Profile、对象引用或冻结哈希时停止；不得在此阶段重新猜测、改选或回退到 `primary`。另两种模式不因 05 为空阻断；
 - 03 为空不阻断，但不得补造客户业务、案例、数据或承诺；
 - 03/05 与批准方向发生足以改变核心立场、身份或 Writer 模式的冲突时，报告冲突并回 Gate A，不静默修改；
 - 输出包含未提供资产、绝对路径、内部哈希、同行专属内容或第二层 Pack 时停止；
@@ -64,7 +64,7 @@ P3 不新增真人确认点。Gate A 已完成；本 Skill 生成 Context Pack �
 
 ## 最小示例
 
-已批准方向选中一张同行内容页和一张口播方法页，业务需求命中一张 03，`speaker_mode=personal_ip`。把两张 04 分角色一般化，选择这张 03 的局部片段，从唯一 Profile 提取少量相关片段，输出一个 `content_context_v1` 后停止。
+已批准方向选中一张同行内容页和一张口播方法页，业务需求命中一张 03，`speaker_mode=personal_ip`，且本 Run 已明确选定其中一位 active Profile。把两张 04 分角色一般化，选择这张 03 的局部片段，从该选定 Profile 提取少量相关片段，输出一个 `content_context_v1` 后停止。
 
 ## 文件导航
 

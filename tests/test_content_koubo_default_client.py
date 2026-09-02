@@ -48,7 +48,7 @@ class DefaultClientTests(unittest.TestCase):
                         str(Path(directory) / "reference.md"),
                     ]
                 )
-                self.assertEqual(args.registry, str(default_registry_path()))
+                self.assertIsNone(args.registry)
                 self.assertEqual(args.runs_root, str(default_runs_root()))
                 self.assertIsNone(args.client_id)
 

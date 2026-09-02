@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/slbb1995/content-koubo-slim/schemas/knowledge-base-registry.schema.json",
+  "title": "Content Knowledge Base Registry v1 compatible copy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "bindings", "workflow_defaults", "revision"],
+  "properties": {
+    "contract_version": {"const": "content-source-v1"},
+    "bindings": {"type": "object", "patternProperties": {"^BND-[A-F0-9]{16}$": {"type": "object", "additionalProperties": false, "required": ["binding_id", "client_id", "knowledge_base_id", "backend", "locator", "manifest_ref", "profile_index_ref", "supported_workflows", "workflow_defaults", "status"], "properties": {"binding_id": {"type": "string"}, "client_id": {"type": "string"}, "knowledge_base_id": {"type": "string"}, "backend": {"enum": ["obsidian", "feishu"]}, "locator": {"type": "object"}, "manifest_ref": {"type": "string"}, "profile_index_ref": {"type": "string"}, "supported_workflows": {"type": "array"}, "workflow_defaults": {"type": "object"}, "status": {"enum": ["active", "disabled"]}}}}, "additionalProperties": false},
+    "workflow_defaults": {"type": "object", "additionalProperties": false, "properties": {"content-koubo-slim": {"type": "string"}, "content-gzh-slim": {"type": "string"}}},
+    "revision": {"type": "integer", "minimum": 1}
+  }
+}

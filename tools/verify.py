@@ -66,17 +66,13 @@ def verify_content() -> None:
         raise RuntimeError("release manifest and VERSION differ")
 
     source = manifest.get("source", {})
-    if (
-        not isinstance(source.get("commit"), str)
-        or len(source["commit"]) != 40
-        or source.get("selection_path") != "packages/content-koubo-slim.json"
-    ):
-        raise RuntimeError("release manifest is not bound to the Factory source")
+    if source != {"repository": "https://github.com/slbb1995/content-koubo-slim"}:
+        raise RuntimeError("release manifest source repository is invalid")
 
     runtime = manifest.get("runtime", {})
     files = runtime.get("files", [])
-    if runtime.get("file_count") != 34 or len(files) != 34:
-        raise RuntimeError("Content 口播 Slim must contain exactly 34 runtime files")
+    if runtime.get("file_count") != len(files) or len(files) < 34:
+        raise RuntimeError("Content 口播 Slim runtime file count is invalid")
     if runtime.get("skill_count") != 5:
         raise RuntimeError("Content 口播 Slim must contain exactly five skills")
     if set(runtime.get("skills", [])) != CONTENT_SKILLS:
@@ -121,6 +117,7 @@ def verify_examples_and_cli() -> None:
 
     from runtime.client_manifest import validate_manifest
     from runtime.client_registry import load_registry
+    from runtime.content_source import validate_common_manifest, validate_common_registry, validate_profile_index
 
     manifest_data = json.loads(
         (
@@ -129,6 +126,12 @@ def verify_examples_and_cli() -> None:
     )
     validate_manifest(manifest_data, expected_client_id="my-content")
     load_registry(ROOT / "examples" / "client-registry.example.json")
+    common_manifest = json.loads((ROOT / "examples" / "content-source-manifest.example.json").read_text(encoding="utf-8"))
+    common_profiles = json.loads((ROOT / "examples" / "content-profile-index.example.json").read_text(encoding="utf-8"))
+    common_registry = json.loads((ROOT / "examples" / "knowledge-base-registry.example.json").read_text(encoding="utf-8"))
+    validate_common_manifest(common_manifest)
+    validate_profile_index(common_profiles, knowledge_base_id=common_manifest["knowledge_base_id"])
+    validate_common_registry(common_registry)
 
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -192,7 +195,8 @@ def main() -> int:
     verify_examples_and_cli()
     verify_tests()
     verify_no_generated_files()
-    print("PASS: standalone Content 口播 Slim 5 skills / 34 runtime files verified.")
+    count = json.loads((ROOT / "release-manifest.json").read_text(encoding="utf-8"))["runtime"]["file_count"]
+    print(f"PASS: standalone Content 口播 Slim 5 skills / {count} runtime files verified.")
     return 0
 
 

@@ -13,6 +13,7 @@ from .client_registry import (
     ClientLocation,
     default_registry_path,
     default_runs_root,
+    load_effective_registry,
     load_registry,
     resolve_client,
     select_client_id,
@@ -29,7 +30,8 @@ from .schema_validation import (
     validate_writer_result,
 )
 from .state_machine import SlimStateMachine
-from .vault_reader import read_method_asset, read_primary_profile
+from .content_source import plan_obsidian_configuration, apply_obsidian_configuration
+from .vault_reader import read_method_asset, read_primary_profile, read_selected_profile
 from .vault_search import search_knowledge_assets, search_method_assets
 
 __all__ = [
@@ -44,9 +46,13 @@ __all__ = [
     "default_runs_root",
     "load_manifest",
     "load_registry",
+    "load_effective_registry",
     "preflight_references",
     "read_method_asset",
     "read_primary_profile",
+    "read_selected_profile",
+    "plan_obsidian_configuration",
+    "apply_obsidian_configuration",
     "resolve_asset_root",
     "resolve_client",
     "resolve_speaker_mode",

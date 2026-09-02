@@ -1,0 +1,22 @@
+{
+  "contract_version": "content-source-v1",
+  "knowledge_base_id": "KB-0ED186CDB6A30C09",
+  "client_id": "example-client",
+  "knowledge_base_name": "Example Knowledge Base",
+  "backend": "obsidian",
+  "locator": "/absolute/path/to/knowledge-base",
+  "asset_roots": {
+    "knowledge": "03-业务知识库",
+    "content": "04-内容方法库",
+    "profiles": "05-IP-Profile",
+    "workflow": "06-Agent与Workflow",
+    "output": "07-生产与反馈"
+  },
+  "profile_index_ref": "06-Agent与Workflow/content-profile-index.json",
+  "workflow_outputs": {
+    "content-koubo-slim": "content-koubo-slim/{profile_id}/weekly",
+    "content-gzh-slim": "content-gzh-slim/{profile_id}/articles"
+  },
+  "supported_workflows": ["content-gzh-slim", "content-koubo-slim"],
+  "revision": 1
+}
