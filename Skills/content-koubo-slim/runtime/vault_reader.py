@@ -18,6 +18,7 @@ ASSET_ROLE_BY_TYPE = {
     "peer_content_asset": "peer_content_asset",
     "oral_structure": "oral_method_asset",
     "oral_method_asset": "oral_method_asset",
+    "content_method_asset": "oral_method_asset",
 }
 AUDIENCE_SCOPES = {"consumer", "internal_sales_training", "both"}
 
@@ -50,6 +51,8 @@ class ProfileAsset:
     page_sha256: str
     title: str
     body: str
+    profile_id: str | None = None
+    display_name: str | None = None
 
 
 def safe_method_root(value: str | Path) -> Path:
@@ -184,6 +187,10 @@ def read_method_asset(
             raise ValueError("method asset_id is missing")
         if asset_type not in ASSET_ROLE_BY_TYPE:
             raise ValueError("method asset type is not selectable")
+        if asset_type == "content_method_asset":
+            workflows = _string_list(metadata.get("applicable_workflows"), "applicable_workflows")
+            if "content-koubo-slim" not in workflows:
+                raise ValueError("method asset is not applicable to content-koubo-slim")
         if metadata.get("status") != "active":
             raise ValueError("method asset is not active")
         if audience_scope not in AUDIENCE_SCOPES:
@@ -398,3 +405,60 @@ def read_primary_profile(
             artifacts_preserved=True,
         )
     return matches[0]
+
+
+def read_selected_profile(
+    profile_root: str | Path, profile_record: dict[str, Any]
+) -> ProfileAsset:
+    """Read exactly the Profile selected from content-profile-index.json."""
+
+    root = _safe_authorized_root(
+        profile_root,
+        error_code="SLIM_PROFILE_INVALID",
+        logical_name="profile_root",
+    )
+    try:
+        object_ref = profile_record["object_ref"]
+        if not isinstance(object_ref, str):
+            raise ValueError("Profile object_ref is invalid")
+        relative = PurePosixPath(object_ref)
+        if relative.parts and relative.parts[0] == root.name:
+            relative = PurePosixPath(*relative.parts[1:])
+        if not relative.parts:
+            raise ValueError("Profile object_ref does not name a file")
+        digest, title, body = _read_markdown_below(
+            root,
+            relative.as_posix(),
+            error_code="SLIM_PROFILE_INVALID",
+            expected_sha256=profile_record.get("content_sha256"),
+        )
+        raw = root.joinpath(*relative.parts).read_text(encoding="utf-8")
+        metadata = _frontmatter(_split_frontmatter(raw)[0])
+        if metadata.get("status") != "active":
+            raise ValueError("selected Profile is no longer active")
+        profile_id = metadata.get("profile_id")
+        if profile_id != profile_record.get("profile_id"):
+            raise ValueError("selected Profile identity changed")
+        display_name = metadata.get("display_name") or profile_record.get("display_name")
+        if display_name != profile_record.get("display_name"):
+            raise ValueError("selected Profile display name changed")
+        return ProfileAsset(
+            relative_path=relative.as_posix(),
+            page_sha256=digest,
+            title=title,
+            body=body,
+            profile_id=profile_id,
+            display_name=display_name,
+        )
+    except SlimRuntimeError:
+        raise
+    except (KeyError, OSError, UnicodeError, TypeError, ValueError) as exc:
+        raise SlimRuntimeError(
+            "SLIM_PROFILE_INVALID",
+            "vault_reader",
+            detail=str(exc),
+            workflow_stage="正在准备客户内容资料",
+            run_exists=True,
+            artifacts_exist=True,
+            artifacts_preserved=True,
+        ) from exc

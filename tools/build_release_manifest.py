@@ -70,13 +70,6 @@ def main() -> int:
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     files = runtime_files()
     tree = tree_sha256(files)
-    source = manifest.get("source", {})
-    if (
-        not isinstance(source.get("commit"), str)
-        or len(source["commit"]) != 40
-        or source.get("selection_path") != "packages/content-koubo-slim.json"
-    ):
-        raise SystemExit("release manifest lacks a valid Factory source binding")
     manifest["schema_version"] = "content-koubo-slim-release-v1"
     manifest["package"] = {"id": "content-koubo-slim", "version": version}
     manifest["runtime"] = {
@@ -87,7 +80,7 @@ def main() -> int:
         "skills": list(CONTENT_SKILLS),
         "tree_sha256": tree,
     }
-    manifest["source"] = source
+    manifest["source"] = {"repository": "https://github.com/slbb1995/content-koubo-slim"}
     manifest["integrity"] = {"hash_algorithm": "sha256"}
     manifest_path.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",

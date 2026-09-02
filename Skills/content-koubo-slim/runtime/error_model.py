@@ -14,6 +14,10 @@ ERROR_CATALOG = {
         "当前客户没有可用配置，本次任务尚未开始。",
         "先在客户索引中完成唯一配置，再重新开始。",
     ),
+    "SLIM_BACKEND_UNSUPPORTED": (
+        "当前知识库后端不能由 Content 口播 Slim 直接读取，本次任务尚未开始。",
+        "口播目前只支持 Obsidian；请改选已确认的 Obsidian 知识库。",
+    ),
     "SLIM_MANIFEST_INVALID": (
         "当前客户的内容配置不完整或不安全，本次任务没有进入内容阶段。",
         "修正客户 Manifest 后，在同一次任务中重试。",
@@ -51,8 +55,8 @@ ERROR_CATALOG = {
         "检查客户 Manifest 的知识目录和相关页面后，在同一个 Run 重试。",
     ),
     "SLIM_PROFILE_INVALID": (
-        "当前个人讲述模式缺少唯一可用的主 Profile。",
-        "在客户授权的 Profile 目录保留唯一 active primary Profile 后重试。",
+        "当前个人讲述模式没有解析到唯一可用的 IP。",
+        "请明确选择一个 active IP；primary 只作为默认值，不限制其他 IP。",
     ),
     "SLIM_CONTEXT_INPUT_INVALID": (
         "准备给上下文装配器的资料不完整或来源错绑。",

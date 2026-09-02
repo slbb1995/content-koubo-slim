@@ -40,7 +40,11 @@ description: Content 口播 Slim 的唯一用户入口。用于开始、继续�
 }
 ```
 
-`client_id` 和 `speaker_mode` 从当前配置解析。默认读取当前 Codex Host 的持久 Registry；只有一条有效客户记录时自动采用，多条记录时必须让用户明确选择，不扫描电脑或猜测知识库。当前 Codex Host 没有向入口提供可验证且跨 `start / respond-direction / status` 稳定的身份，因此普通 CLI 不接收 `host_request_id` 或原始 `task_key`。确定性程序根据冻结的客户、讲述模式、用户原始选题和参考来源集合生成 task-record；后续内部操作只接受已经落盘并通过完整性校验的相对句柄。不得让用户填写或让 AI 临时编造；不得改传绝对路径，必须原样复用入口返回的 task-record。
+可选显式提供 `binding_id`、`client_id`、`speaker_mode` 和本次 `profile`。默认先读取公共 Registry `~/.codex/.content-workflows/knowledge-base-registry.json`，没有公共配置时兼容旧 `.content-koubo-slim/client-registry.json`。公共与旧配置指向不一致时停止；不扫描电脑或猜测知识库。
+
+`personal_ip` 支持选择当前知识库任意 active Profile。顺序是：本次明确指定 → 已确认的口播默认 → primary → 唯一 active → 要求选择；primary 只是默认。选中的 `profile_id`、对象引用和内容哈希进入 Run 身份，换 IP 必须新建 Run。
+
+确定性程序根据冻结的 binding、Profile、讲述模式、用户原始选题和参考来源集合生成 task-record；后续内部操作只接受已经落盘并通过完整性校验的相对句柄。不得让用户填写或让 AI 临时编造。
 
 ## 输出
 
@@ -64,15 +68,15 @@ description: Content 口播 Slim 的唯一用户入口。用于开始、继续�
 
 ## 执行流程
 
-1. 从当前 Host 的默认或显式 Registry 定位客户：唯一记录自动采用，多条记录等待用户选择，再按 `client_id` 定位 Vault 和 Manifest；
-2. 校验 Manifest 并解析 `speaker_mode`；
+1. 从公共或兼容旧 Registry 定位一个 Obsidian binding；飞书 binding 必须明确返回“不支持口播直接读取”，不得猜本地同步目录；
+2. 校验 Manifest、Profile 索引，解析 `speaker_mode` 和本次 Profile；
 3. 在创建 Run 前验证 1—5 篇参考可读，再根据冻结业务身份和参考来源集合生成受控 task-record，创建或恢复唯一 Run；
-4. create-only 冻结用户原始选题、参考集合、`client_id` 和 `speaker_mode`；系统内部生成规范化问题并标记 `system_generated`，不要求用户或 AI 提供；
+4. create-only 冻结用户原始选题、参考集合、`binding_id`、`client_id`、`profile_id` 和 `speaker_mode`；
 5. 只从 Manifest 的 `method_root` 轻量检索 04，不依赖用户填写受众范围；最多 0—3 张同行内容资产和 0—2 张口播方法资产，可返回不同 `audience_scope`；无高相关结果时继续；
 6. 把标准化参考和 04 候选交给 `$content-koubo-analyzer`，接收完整结果后生成一次 Gate A；
 7. Gate A 修改前由 AI 判断是否根本改变原始选题、目标受众、核心承诺、参考集合、客户或讲述者；根本变化时在现有 `respond-direction` 内部交接设置 `--task-identity-changed`，由程序要求新 Run；普通修改才在同一 Run 生成下一版，且 `direction_vN` 只消费同版本 `analyzer_input_vN`；
 8. 认可时冻结用户实际看到的同版本 Gate A 或其确定性投影，不采用时结束；
-9. Gate A 批准后，程序只按冻结清单回读 04，按业务需求读取少量 03，并按 `speaker_mode` 条件读取 05；
+9. Gate A 批准后，程序只按冻结清单回读 04，按业务需求读取少量 03，并在 `personal_ip` 模式只读取本次选定的 05 Profile；
 10. 调用 `$content-koubo-context-retriever` 形成唯一 `content_context_v1.json`，校验并进入 `context_ready`；
 11. P4 只把这份 Context Pack 交给 `$content-koubo-writer`，按冻结值加载一份 `ganhuo / huati / zhuanhua` 主模式规则；
 12. 程序把 Writer 的自然段输出 create-only 保存为同版本 `draft_vN.json` 与 `draft_vN.md`，完整展示正文；
@@ -81,7 +85,7 @@ description: Content 口播 Slim 的唯一用户入口。用于开始、继续�
 15. P5 重新校验已确认正文，只把正文交给 `$content-koubo-publish-pack`，生成一份含 2 个封面标题、3 个发布标题、推荐项、50—100 字发布正文和 5 个标签的 `package_vN.json`；
 16. 用户选择“需要修改”时，保留旧版本，在同一 Run 用当前配套、同一已确认正文和本次具体意见生成下一版；
 17. 用户选择“确认并保存”时，默认使用推荐标题，也可选当前其他候选；程序固定 `approved_package.json`，不再询问一次是否保存；
-18. 程序重新校验冻结客户位置和 Manifest 输出根，一起预检两个目标，create-only 写入纯口播稿与配套文案并分别回读；
+18. 程序重新校验 Registry、Manifest、Profile 索引及 P3 实际读取的 03/04/05 哈希，再从 Manifest 推导输出根，create-only 写入两份文件并分别回读；
 19. 只有两份文件都成功才进入 `saved`；结果始终保持 `publish_status=not_requested`，P5 停止，不进入 P6。
 
 ## 真人停点
@@ -98,7 +102,7 @@ Gate A 只接受：`认可整版方向 / 需要修改 / 不采用`。正文确�
 
 - 任意 CLI 字符串被当作宿主身份或 task-record 时，在创建 Run 或恢复前停止；
 - Registry、Manifest、Run 索引、参考来源或 `method_root` 不可信时立即停止；
-- Registry 含多个客户且用户未选择时停止，不按顺序、最近使用时间或目录名猜测；
+- Registry 含多个可用知识库且没有工作流默认或显式选择时停止；多个 active IP 且没有默认或显式选择时也停止；
 - 同一 `task_key` 出现多个候选 Run 时 fail closed；
 - Gate A 修改根本改变任务身份时设置内部 `--task-identity-changed`，不得在原 Run 创建下一版方向；
 - 非法状态迁移、版本覆盖或客户身份变化时停止；
@@ -114,7 +118,7 @@ Gate A 只接受：`认可整版方向 / 需要修改 / 不采用`。正文确�
 - 不调用任何旧 Content V1 Skill；
 - P2 调用 `content-koubo-analyzer`；P3 调用 `content-koubo-context-retriever`；P4 调用 `content-koubo-writer`；P5 只新增并调用 `content-koubo-publish-pack`；
 - 不增加 Reviewer、第二层上下文包或临时程序；
-- 不扫描未授权目录，不写客户名、行业、Profile 文件名或资产物理目录；
+- 不扫描未授权目录，不把客户名、行业或物理路径写死进共享 Skill；
 - Writer 只允许读取一份 `content_context_v1.json`；不调用三个旧 Writer，不搜索 Vault，不重选模式；
 - 配套 Skill 不读取 Vault、不修改或重复输出已确认正文；
 - P5 只写 Manifest 授权输出根下的两份最终 Markdown，不修改客户 Vault 的 01—05；
@@ -128,13 +132,13 @@ Gate A 只接受：`认可整版方向 / 需要修改 / 不采用`。正文确�
 ## 文件导航
 
 - `scripts/content_koubo_slim.py`：方向、Context Pack、正文、配套版本与三次真人确认的编排；
-- `runtime/client_registry.py`、`client_manifest.py`：默认配置位置、唯一客户选择与通用配置；
+- `runtime/content_source.py`、`client_registry.py`、`client_manifest.py`：公共合同、独立配置器、知识库和任意 active Profile 选择；
 - `runtime/run_store.py`、`state_machine.py`：锁、单 Run、正文/配套版本和状态；
 - `runtime/reference_prep.py`：1—5 篇参考的独立准备；
 - `runtime/vault_search.py`、`vault_reader.py`：Manifest 限定的 04 搜索/回读，以及 P3 授权 03 的局部检索和条件 05 回读；
 - `runtime/schema_validation.py`：Analyzer、Gate A、唯一 Context Pack、正文与配套输出边界；
 - `runtime/vault_save.py`：Manifest 授权输出根下的双文件 create-only 保存与回读；
 - `runtime/error_model.py`：用户响应与技术记录分离；
-- `schemas/`：Registry 与 Manifest 字段合同。
+- `schemas/`：公共 Registry、Manifest、Profile 索引与旧 v2 兼容合同。
 
 设计原因保存在 Factory 设计卡；实现细节读 `runtime/`；字段约束读 `schemas/`。不要把这些内容复制回本文件。

@@ -17,7 +17,7 @@
 
 ## 05：讲述者 Profile
 
-- `personal_ip` 必须有且只有一份 active primary Profile；
+- `personal_ip` 必须使用本 Run 已明确选定并冻结的一份 active Profile；`primary` 只参与默认选择，不限制选择其他 active Profile；
 - `company_brand` 和 `neutral` 不读取 05，输出 `profile_context: null`；
 - 只提取 Writer 当前真正需要的少量逐字片段；
 - 本人确认事实、项目设定和候选素材不得互相冒充；候选素材不能自动升级为本人事实。

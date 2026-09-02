@@ -30,6 +30,7 @@ def _render_template(template: str, client_id: str, now: datetime) -> PurePosixP
     if not isinstance(client_id, str) or not client_id.strip():
         _fail("client id is missing")
     rendered = template.replace("{profile_or_brand}", client_id)
+    rendered = rendered.replace("{profile_id}", client_id)
     rendered = rendered.replace("YYYY", f"{now.year:04d}")
     rendered = re.sub(r"(?<![A-Za-z])M(?![A-Za-z])", str(now.month), rendered)
     rendered = re.sub(
