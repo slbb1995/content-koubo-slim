@@ -150,10 +150,10 @@
         "skill": "content-koubo-slim"
       },
       {
-        "bytes": 40115,
+        "bytes": 41115,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/runtime/run_store.py",
-        "sha256": "0b16bf916bbb92f8260d1415a597e3bc39eec4a0be5974fe6e6743cfbf224e1a",
+        "sha256": "295da1b38791f8bc9a3c7b2e563b8a8f23ae66923ec56f43f08ded5ace9cd5aa",
         "skill": "content-koubo-slim"
       },
       {
@@ -285,7 +285,7 @@
       "content-koubo-slim",
       "content-koubo-writer"
     ],
-    "tree_sha256": "802c06fc94b4b8ab7ee8e1dd75501af50cae4aaad4bfb0172dc347b9e2e02c29"
+    "tree_sha256": "b2556c70a56d0f70eebafb188b6093c53e631f8f5176ef6cad3b91b6ff3672a3"
   },
   "schema_version": "content-koubo-slim-release-v1",
   "source": {

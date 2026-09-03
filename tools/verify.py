@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -125,7 +126,16 @@ def verify_examples_and_cli() -> None:
         ).read_text(encoding="utf-8")
     )
     validate_manifest(manifest_data, expected_client_id="my-content")
-    load_registry(ROOT / "examples" / "client-registry.example.json")
+    legacy_registry = json.loads(
+        (ROOT / "examples" / "client-registry.example.json").read_text(encoding="utf-8")
+    )
+    legacy_registry["clients"]["my-content"]["vault_root"] = str(ROOT.resolve())
+    with tempfile.TemporaryDirectory(prefix=".content-koubo-verify-", dir=ROOT) as directory:
+        registry_path = Path(directory) / "client-registry.json"
+        registry_path.write_text(
+            json.dumps(legacy_registry, ensure_ascii=False), encoding="utf-8"
+        )
+        load_registry(registry_path)
     common_manifest = json.loads((ROOT / "examples" / "content-source-manifest.example.json").read_text(encoding="utf-8"))
     common_profiles = json.loads((ROOT / "examples" / "content-profile-index.example.json").read_text(encoding="utf-8"))
     common_registry = json.loads((ROOT / "examples" / "knowledge-base-registry.example.json").read_text(encoding="utf-8"))
@@ -135,9 +145,12 @@ def verify_examples_and_cli() -> None:
 
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["PYTHONUTF8"] = "1"
     result = subprocess.run(
         [
             sys.executable,
+            "-X",
+            "utf8",
             "-B",
             str(content_root / "scripts" / "content_koubo_slim.py"),
             "--help",
@@ -146,6 +159,8 @@ def verify_examples_and_cli() -> None:
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="strict",
         check=False,
     )
     if (
@@ -168,9 +183,12 @@ def verify_no_generated_files() -> None:
 def verify_tests() -> None:
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["PYTHONUTF8"] = "1"
     result = subprocess.run(
         [
             sys.executable,
+            "-X",
+            "utf8",
             "-B",
             "-m",
             "unittest",
@@ -182,6 +200,8 @@ def verify_tests() -> None:
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="strict",
         check=False,
     )
     if result.returncode != 0:
