@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -34,6 +34,7 @@ class MethodAsset:
     keywords: tuple[str, ...]
     use_when: tuple[str, ...]
     body: str
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -159,6 +160,7 @@ def read_method_asset(
     relative_path: str,
     *,
     expected_sha256: str | None = None,
+    include_guidance: bool = False,
 ) -> MethodAsset:
     root = safe_method_root(method_root)
     try:
@@ -185,8 +187,14 @@ def read_method_asset(
         audience_scope = metadata.get("audience_scope")
         if not isinstance(asset_id, str) or not asset_id.strip():
             raise ValueError("method asset_id is missing")
-        if asset_type not in ASSET_ROLE_BY_TYPE:
+        guidance = asset_type in {"oral_method", "oral_structure_index"} or metadata.get("method_kind") in {"selection_guide", "index", "methodology"}
+        if asset_type not in ASSET_ROLE_BY_TYPE and not (include_guidance and guidance):
             raise ValueError("method asset type is not selectable")
+        if guidance and not include_guidance:
+            raise ValueError("planning guidance is not a writing material candidate")
+        workflows = metadata.get("applicable_workflows")
+        if workflows is not None and "content-koubo-slim" not in _string_list(workflows, "applicable_workflows"):
+            raise ValueError("method asset is not applicable to content-koubo-slim")
         if asset_type == "content_method_asset":
             workflows = _string_list(metadata.get("applicable_workflows"), "applicable_workflows")
             if "content-koubo-slim" not in workflows:
@@ -202,7 +210,7 @@ def read_method_asset(
             raise ValueError("method asset has no H1 title")
         return MethodAsset(
             asset_id=asset_id.strip(),
-            asset_role=ASSET_ROLE_BY_TYPE[asset_type],
+            asset_role=ASSET_ROLE_BY_TYPE.get(asset_type, "oral_method_asset"),
             relative_path=relative.as_posix(),
             page_sha256=page_sha256,
             audience_scope=audience_scope,
@@ -210,6 +218,7 @@ def read_method_asset(
             keywords=keywords,
             use_when=use_when,
             body=body.strip(),
+            metadata=metadata,
         )
     except SlimRuntimeError:
         raise

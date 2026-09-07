@@ -69,7 +69,8 @@ class RunStore:
             "reference_set_sha256",
         }
         common_required = legacy_required | {"binding_id", "profile_id"}
-        if not isinstance(business_identity, dict) or frozenset(business_identity) not in {frozenset(legacy_required), frozenset(common_required)}:
+        optional = {"library_input_sha256"}
+        if not isinstance(business_identity, dict) or frozenset(set(business_identity) - optional) not in {frozenset(legacy_required), frozenset(common_required)}:
             raise SlimRuntimeError(
                 "SLIM_TASK_KEY_UNTRUSTED",
                 "run_store",
@@ -83,7 +84,7 @@ class RunStore:
                     "run_store",
                     detail=f"frozen business identity {field} is invalid",
                 )
-        if set(business_identity) == common_required:
+        if set(business_identity) - optional == common_required:
             for field in ("binding_id", "profile_id"):
                 value = business_identity[field]
                 if value is not None and (not isinstance(value, str) or not value.strip()):
@@ -101,6 +102,8 @@ class RunStore:
                 "run_store",
                 detail="frozen reference identity is invalid",
             )
+        if "library_input_sha256" in business_identity and (not isinstance(business_identity["library_input_sha256"], str) or not TASK_DIGEST_PATTERN.fullmatch(business_identity["library_input_sha256"])):
+            raise SlimRuntimeError("SLIM_TASK_KEY_UNTRUSTED", "run_store", detail="library input digest is invalid")
         encoded = json.dumps(
             business_identity,
             ensure_ascii=False,

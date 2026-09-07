@@ -64,7 +64,7 @@ def _title(path: Path, content: str) -> str:
 
 def preflight_references(paths: Iterable[str | Path]) -> list[PreparedReference]:
     source_paths = list(paths)
-    if not 1 <= len(source_paths) <= 5:
+    if not 0 <= len(source_paths) <= 5:
         raise SlimRuntimeError(
             "SLIM_REFERENCE_INVALID",
             "reference_prep",

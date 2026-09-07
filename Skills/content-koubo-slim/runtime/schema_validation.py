@@ -142,7 +142,7 @@ def _relative_markdown(value: Any, field: str, *, code: str) -> str:
 
 def validate_analyzer_input(value: Any) -> dict[str, Any]:
     code = "SLIM_ANALYZER_INPUT_INVALID"
-    if not isinstance(value, dict) or set(value) != ANALYZER_INPUT_FIELDS:
+    if not isinstance(value, dict) or set(value) - {"planning_guidance"} != ANALYZER_INPUT_FIELDS:
         _fail(code, "analyzer input fields do not match the single contract")
     if value["analysis_version"] != "slim-1.0":
         _fail(code, "unsupported analysis_version")
@@ -159,8 +159,8 @@ def validate_analyzer_input(value: Any) -> dict[str, Any]:
     _string_list(value["must_avoid"], "must_avoid", code=code)
 
     references = value["references"]
-    if not isinstance(references, list) or not 1 <= len(references) <= 5:
-        _fail(code, "references must contain 1 to 5 items")
+    if not isinstance(references, list) or not 0 <= len(references) <= 5:
+        _fail(code, "references must contain 0 to 5 items")
     expected_ids = [f"REF-{index:03d}" for index in range(1, len(references) + 1)]
     actual_ids: list[str] = []
     for index, item in enumerate(references, 1):
@@ -184,7 +184,7 @@ def validate_analyzer_input(value: Any) -> dict[str, Any]:
     counts = {role: 0 for role in ASSET_ROLES}
     seen_assets: set[str] = set()
     for index, item in enumerate(candidates, 1):
-        if not isinstance(item, dict) or set(item) != {
+        if not isinstance(item, dict) or set(item) - {"source_metadata"} != {
             "asset_id",
             "asset_role",
             "relative_path",
@@ -211,8 +211,21 @@ def validate_analyzer_input(value: Any) -> dict[str, Any]:
             _fail(code, "method candidate audience_scope is invalid")
         _nonempty(item["excerpt"], "method excerpt", code=code)
         _string_list(item["relevance_evidence"], "relevance_evidence", code=code)
+        if "source_metadata" in item and not isinstance(item["source_metadata"], dict):
+            _fail(code, "candidate source metadata must be an object")
     if counts["peer_content_asset"] > 3 or counts["oral_method_asset"] > 2:
         _fail(code, "method candidate role limits were exceeded")
+    guidance = value.get("planning_guidance", [])
+    if not isinstance(guidance, list) or len(guidance) > 3:
+        _fail(code, "planning guidance exceeds three bounded documents")
+    for item in guidance:
+        if not isinstance(item, dict) or set(item) != {"asset_id", "relative_path", "page_sha256", "content", "reason"}:
+            _fail(code, "invalid planning guidance fields")
+        _relative_markdown(item["relative_path"], "planning guidance path", code=code)
+        for field in ("asset_id", "content", "reason"):
+            _nonempty(item[field], field, code=code)
+        if not isinstance(item["page_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", item["page_sha256"]):
+            _fail(code, "invalid planning guidance hash")
 
     revision = value["revision_request"]
     if revision is not None:
@@ -304,6 +317,8 @@ def validate_analyzer_result(
     selected = value["selected_method_assets"]
     if not isinstance(selected, list) or len(selected) > 5:
         _fail(code, "selected_method_assets must contain at most 5 items")
+    if not expected_ids and not selected:
+        _fail(code, "without explicit references, select supported library material before proposing a library-backed direction")
     selected_ids: set[str] = set()
     for index, item in enumerate(selected, 1):
         if not isinstance(item, dict) or set(item) != {
@@ -326,6 +341,13 @@ def validate_analyzer_result(
         _nonempty(item["usage"], "method asset usage", code=code)
         _nonempty(item["reason"], "method asset reason", code=code)
 
+    if not expected_ids and selected and all(
+        candidates[item["asset_id"]].get("source_metadata", {}).get("method_kind") in {"enhancement", "selection_guide", "index", "methodology"}
+        or candidates[item["asset_id"]].get("source_metadata", {}).get("structure_layer") == "enhancement"
+        or item["asset_id"].startswith("ORAL-ENH-") for item in selected
+    ):
+        _fail(code, "enhancements or planning guides alone cannot supply a content blueprint")
+
     fused = value["fused_direction"]
     if not isinstance(fused, dict) or set(fused) != {
         "target_audience",
@@ -341,6 +363,10 @@ def validate_analyzer_result(
     _nonempty(fused["core_promise"], "core_promise", code=code)
     _string_list(fused["external_reference_value"], "external_reference_value", code=code)
     _string_list(fused["structure_plan"], "structure_plan", code=code)
+    if not expected_ids and not fused["structure_plan"]:
+        _fail(code, "structure_plan must explain the actual content progression")
+    if not expected_ids and fused["external_reference_value"]:
+        _fail(code, "library materials must not be presented as user-supplied external references")
     if not isinstance(fused["conflicts"], list):
         _fail(code, "conflicts must be a list")
     for conflict in fused["conflicts"]:
@@ -552,7 +578,7 @@ def _validate_approved_direction(value: Any, *, code: str) -> dict[str, Any]:
 def validate_context_retriever_input(value: Any) -> dict[str, Any]:
     code = "SLIM_CONTEXT_INPUT_INVALID"
     stage = "正在准备客户内容资料"
-    if not isinstance(value, dict) or set(value) != CONTEXT_INPUT_FIELDS:
+    if not isinstance(value, dict) or set(value) - {"source_mode"} != CONTEXT_INPUT_FIELDS:
         _fail(code, "context retriever input fields do not match the single contract", workflow_stage=stage)
     if value["context_version"] != "slim-1.0":
         _fail(code, "unsupported context_version", workflow_stage=stage)
@@ -585,7 +611,12 @@ def validate_context_retriever_input(value: Any) -> dict[str, Any]:
         "selected_external_reference_mechanisms",
         code=code,
     )
-    if not mechanisms:
+    library_mode = value.get("source_mode") == "library"
+    if value.get("source_mode", "external") not in {"external", "library"}:
+        _fail(code, "unknown source mode", workflow_stage=stage)
+    if library_mode and mechanisms:
+        _fail(code, "library mode cannot invent external mechanisms", workflow_stage=stage)
+    if not mechanisms and not (library_mode and value["selected_04_assets"] and approved["structure_plan"]):
         _fail(code, "detailed reference blueprint is missing", workflow_stage=stage)
 
     selected = value["selected_04_assets"]
@@ -593,7 +624,7 @@ def validate_context_retriever_input(value: Any) -> dict[str, Any]:
         _fail(code, "selected_04_assets must contain at most five items", workflow_stage=stage)
     seen: set[str] = set()
     for item in selected:
-        if not isinstance(item, dict) or set(item) != {
+        if not isinstance(item, dict) or set(item) - {"source_metadata"} != {
             "asset_id",
             "asset_role",
             "relative_path",
@@ -614,6 +645,8 @@ def validate_context_retriever_input(value: Any) -> dict[str, Any]:
             _fail(code, "selected 04 hash is invalid", workflow_stage=stage)
         for field in ("title", "source_excerpt", "approved_usage"):
             _nonempty(item[field], field, code=code)
+        if "source_metadata" in item and not isinstance(item["source_metadata"], dict):
+            _fail(code, "source metadata must be an object", workflow_stage=stage)
 
     needs = _string_list(value["business_context_needs"], "business_context_needs", code=code)
     candidates = value["knowledge_candidates"]
@@ -709,7 +742,7 @@ def validate_content_context(
         if not isinstance(items, list):
             _fail(code, f"{field} must be a list", workflow_stage=stage)
         for item in items:
-            if not isinstance(item, dict) or set(item) != {
+            if not isinstance(item, dict) or set(item) - {"source_metadata"} != {
                 "asset_id",
                 "relative_path",
                 "source_role",
@@ -723,6 +756,8 @@ def validate_content_context(
             if offered is None or asset_id in actual_ids or offered["asset_role"] != expected_role:
                 _fail(code, "04 context changed the frozen selection or role", workflow_stage=stage)
             actual_ids.add(asset_id)
+            if item.get("source_metadata") != offered.get("source_metadata"):
+                _fail(code, "04 context changed source restrictions", workflow_stage=stage)
             if (
                 item["relative_path"] != offered["relative_path"]
                 or item["source_role"] != expected_role

@@ -56,7 +56,9 @@ from runtime.vault_reader import (
     read_primary_profile,
     read_selected_profile,
 )
-from runtime.vault_search import search_knowledge_assets, search_method_assets
+from runtime.vault_search import (search_knowledge_assets, search_method_assets,
+    discover_method_assets, select_method_assets, complete_method_text, method_kind, method_is_usable,
+    method_source_metadata)
 
 
 DRAFT_CHOICES = ("确认正文", "需要修改")
@@ -240,6 +242,10 @@ def prepare_direction_stage(
     must_avoid: list[str],
     binding_id: str | None = None,
     profile: str | None = None,
+    method_selections: list[dict[str, Any]] | None = None,
+    planning_guidance: list[dict[str, Any]] | None = None,
+    audience_scope: str | None = None,
+    allow_experimental: bool = False,
 ) -> tuple[dict[str, Any], str]:
     if not isinstance(topic_original, str) or not topic_original.strip():
         raise SlimRuntimeError(
@@ -289,6 +295,20 @@ def prepare_direction_stage(
             )
     reference_index = build_reference_index(prepared)
     topic_normalized = _normalize_topic(topic_original)
+    query = _method_search_query(topic_original=topic_original, topic_normalized=topic_normalized,
+                                user_thoughts=user_thoughts, must_keep=must_keep, prepared_references=prepared)
+    if method_selections is not None:
+        candidates = select_method_assets(method_root, method_selections, audience_scope=audience_scope,
+                                           allow_experimental=allow_experimental)
+    else:
+        candidates = search_method_assets(method_root, query=query, audience_scope=audience_scope,
+                                          allow_experimental=allow_experimental)
+    if not prepared and not candidates:
+        raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "content_koubo_slim",
+            detail="no explicit reference or relevant library material selected",
+            workflow_stage="正在寻找本题可用的库内资料",
+            recovery_action="由 Agent 用 discover-methods 查看当前库同行和结构元数据，按本题目的选择后重试；确实缺资料时说明缺口，不要求你先懂结构编号。")
+    guidance = _load_planning_guidance(method_root, planning_guidance or [], audience_scope, allow_experimental)
     business_identity = {
         "client_id": resolved_client_id,
         "speaker_mode": resolved_mode,
@@ -302,6 +322,11 @@ def prepare_direction_stage(
                 "profile_id": selected_profile["profile_id"] if selected_profile else None,
             }
         )
+    if not prepared or method_selections is not None or guidance:
+        business_identity["library_input_sha256"] = canonical_json_hash({
+            "candidates": candidates, "user_thoughts": user_thoughts,
+            "must_keep": must_keep, "must_avoid": must_avoid,
+            "audience_scope": audience_scope, "allow_experimental": allow_experimental, "planning_guidance": guidance})
     store = RunStore(runs_root)
     state, created, task_key = store.start_program_task(
         business_identity=business_identity,
@@ -360,17 +385,13 @@ def prepare_direction_stage(
                 "registry_sha256": location.registry_sha256,
             }
         )
+    if "library_input_sha256" in business_identity:
+        frozen_input["library_input_sha256"] = business_identity["library_input_sha256"]
+        frozen_input["source_mode"] = "external_with_library" if prepared else "library"
+        frozen_input["audience_scope"] = audience_scope
+        frozen_input["allow_experimental"] = allow_experimental
+        frozen_input["planning_guidance"] = guidance
     store.freeze_task_input(task_key, frozen_input)
-    candidates = search_method_assets(
-        method_root,
-        query=_method_search_query(
-            topic_original=topic_original,
-            topic_normalized=topic_normalized,
-            user_thoughts=user_thoughts,
-            must_keep=must_keep,
-            prepared_references=prepared,
-        ),
-    )
     analyzer_input = validate_analyzer_input(
         {
             "analysis_version": "slim-1.0",
@@ -385,6 +406,7 @@ def prepare_direction_stage(
             "references": [item.analyzer_item() for item in prepared],
             "method_candidates": candidates,
             "revision_request": None,
+            **({"planning_guidance": guidance} if guidance else {}),
         }
     )
     store.write_fixed_json(task_key, "analyzer_input_v1.json", analyzer_input)
@@ -392,7 +414,7 @@ def prepare_direction_stage(
         "status": "working",
         "status_label": "正在拆解并匹配客户内容方向",
         "workflow_stage": "正在拆解并匹配客户内容方向",
-        "message": "参考件和当前客户 04 候选已准备；下一步只生成完整方向，不写正文。",
+        "message": "已准备本题的" + ("外部对标和库内资料" if prepared else "库内同行内容与方法候选") + "；下一步由 Agent 结合你的想法形成具体方向。",
         "next_action": "由 content-koubo-analyzer 生成完整方向后展示 Gate A。",
         "run_exists": True,
         "run_created_now": created,
@@ -621,6 +643,7 @@ def respond_direction(
             artifacts_preserved=True,
         )
     result = direction["analyzer_result"]
+    _verify_planning_guidance(store.read_task_input(task_key), method_root)
     for selected in result["selected_method_assets"]:
         read_method_asset(
             method_root,
@@ -739,6 +762,7 @@ def prepare_context_stage(
     _verify_frozen_manifest(frozen, manifest, workflow_stage="正在准备客户内容资料")
     resolved_mode = resolve_speaker_mode(frozen["speaker_mode"], manifest)
     method_root = resolve_asset_root(location.vault_root, manifest, "method")
+    _verify_planning_guidance(frozen, method_root)
     selected_04_assets: list[dict[str, Any]] = []
     for selected in approved["selected_method_assets"]:
         asset = read_method_asset(
@@ -763,8 +787,9 @@ def prepare_context_stage(
                 "relative_path": asset.relative_path,
                 "page_sha256": asset.page_sha256,
                 "title": asset.title,
-                "source_excerpt": asset.body[:1800].rstrip(),
+                "source_excerpt": complete_method_text(asset),
                 "approved_usage": selected["usage"],
+                **({"source_metadata": method_source_metadata(asset)} if "library_input_sha256" in frozen else {}),
             }
         )
 
@@ -825,6 +850,7 @@ def prepare_context_stage(
     context_input = validate_context_retriever_input(
         {
             "context_version": "slim-1.0",
+            **({"source_mode": "library"} if frozen.get("source_mode") == "library" else {}),
             "client_id": frozen["client_id"],
             "speaker_mode": resolved_mode,
             "task_input": {
@@ -1359,6 +1385,7 @@ def _package_markdown(approval: dict[str, Any], content: dict[str, Any]) -> str:
 def _verify_source_snapshot_before_save(
     *, store: RunStore, task_key: str, frozen: dict[str, Any], location: Any, manifest: Any
 ) -> None:
+    _verify_planning_guidance(frozen, resolve_asset_root(location.vault_root, manifest, "method"))
     if "manifest_sha256" not in frozen:
         # Pre-v3 Runs keep their original behavior and remain resumable.
         return
@@ -1632,6 +1659,18 @@ def respond_package(
 
 
 def _start(args: argparse.Namespace) -> dict[str, Any]:
+    selections = None
+    guidance = None
+    if args.method_selection:
+        try:
+            selections = json.loads(Path(args.method_selection).read_text(encoding="utf-8"))
+            if isinstance(selections, dict):
+                if set(selections) - {"materials", "planning_guidance"} or "materials" not in selections:
+                    raise ValueError("selection object requires materials and optional planning_guidance")
+                guidance = selections.get("planning_guidance", [])
+                selections = selections["materials"]
+        except (OSError, UnicodeError, ValueError) as exc:
+            raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "content_koubo_slim", detail=str(exc)) from exc
     response, _ = prepare_direction_stage(
         registry_path=args.registry,
         runs_root=args.runs_root,
@@ -1644,8 +1683,53 @@ def _start(args: argparse.Namespace) -> dict[str, Any]:
         must_avoid=args.must_avoid,
         binding_id=args.binding_id,
         profile=args.profile,
+        method_selections=selections,
+        planning_guidance=guidance,
+        audience_scope=args.audience_scope,
+        allow_experimental=args.allow_experimental,
     )
     return response
+
+
+def _discover_methods(args: argparse.Namespace) -> dict[str, Any]:
+    registry = load_effective_registry(args.registry)
+    binding = select_client_id(registry, args.client_id, requested_binding_id=args.binding_id)
+    location = resolve_client(registry, binding)
+    manifest = load_manifest(location.manifest_path, expected_client_id=location.client_id)
+    if location.knowledge_base_id is not None and location.knowledge_base_id != manifest.knowledge_base_id:
+        raise SlimRuntimeError("SLIM_MANIFEST_INVALID", "content_koubo_slim", detail="binding differs from Manifest")
+    root = resolve_asset_root(location.vault_root, manifest, "method")
+    if args.read_path:
+        if not args.expected_sha256 or not re.fullmatch(r"[0-9a-f]{64}", args.expected_sha256):
+            raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "content_koubo_slim", detail="read requires discovered snapshot hash")
+        asset = read_method_asset(root, args.read_path, expected_sha256=args.expected_sha256, include_guidance=True)
+        if not method_is_usable(asset, args.audience_scope, args.allow_experimental):
+            raise SlimRuntimeError("SLIM_METHOD_ASSET_INVALID", "content_koubo_slim", detail="material is excluded for this audience or usage scope")
+        return {"wrote": False, "asset_id": asset.asset_id, "method_kind": method_kind(asset),
+                "page_sha256": asset.page_sha256, "source_metadata": method_source_metadata(asset),
+                "content": complete_method_text(asset)}
+    return discover_method_assets(root, offset=args.offset, limit=args.limit,
+                                  audience_scope=args.audience_scope, allow_experimental=args.allow_experimental)
+
+
+def _load_planning_guidance(root, selections, audience_scope, allow_experimental):
+    if not isinstance(selections, list) or len(selections) > 3:
+        raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "content_koubo_slim", detail="at most three planning guides")
+    result, ids = [], set()
+    for item in selections:
+        if not isinstance(item, dict) or set(item) != {"relative_path", "page_sha256", "reason"} or not isinstance(item["reason"], str) or not item["reason"].strip() or not isinstance(item["page_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", item["page_sha256"]):
+            raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "content_koubo_slim", detail="invalid planning guide selection")
+        asset = read_method_asset(root, item["relative_path"], expected_sha256=item["page_sha256"], include_guidance=True)
+        if method_kind(asset) not in {"selection_guide", "index", "methodology"} or asset.asset_id in ids or not method_is_usable(asset, audience_scope, allow_experimental):
+            raise SlimRuntimeError("SLIM_METHOD_ASSET_INVALID", "content_koubo_slim", detail="not permitted planning guidance")
+        ids.add(asset.asset_id)
+        result.append({**item, "asset_id": asset.asset_id, "content": complete_method_text(asset)})
+    return result
+
+
+def _verify_planning_guidance(frozen, root):
+    for item in frozen.get("planning_guidance", []):
+        read_method_asset(root, item["relative_path"], expected_sha256=item["page_sha256"], include_guidance=True)
 
 
 def _configure(args: argparse.Namespace) -> dict[str, Any]:
@@ -1924,6 +2008,18 @@ def build_parser() -> argparse.ArgumentParser:
     configure.add_argument("--confirmation")
     configure.set_defaults(handler=_configure)
 
+    discovery = subparsers.add_parser("discover-methods", help="internal: bounded library metadata for semantic material selection")
+    _add_registry_argument(discovery)
+    discovery.add_argument("--client-id")
+    discovery.add_argument("--binding-id")
+    discovery.add_argument("--audience-scope", choices=("consumer", "internal_sales_training"))
+    discovery.add_argument("--allow-experimental", action="store_true", help="only for explicitly authorized experiment tasks")
+    discovery.add_argument("--offset", type=int, default=0)
+    discovery.add_argument("--limit", type=int, default=40)
+    discovery.add_argument("--read-path")
+    discovery.add_argument("--expected-sha256")
+    discovery.set_defaults(handler=_discover_methods)
+
     start = subparsers.add_parser("start", help="prepare one Run through Analyzer input")
     _add_registry_argument(start)
     _add_runs_root_argument(start)
@@ -1932,7 +2028,10 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--profile", help="active Profile id, display name, or unique alias")
     start.add_argument("--speaker-mode", choices=("personal_ip", "company_brand", "neutral"))
     start.add_argument("--topic-original", required=True)
-    start.add_argument("--reference", action="append", required=True)
+    start.add_argument("--reference", action="append", default=[])
+    start.add_argument("--method-selection", help="internal JSON list selected from discover-methods")
+    start.add_argument("--audience-scope", choices=("consumer", "internal_sales_training"))
+    start.add_argument("--allow-experimental", action="store_true", help="only for explicitly authorized experiment tasks")
     start.add_argument("--user-thoughts")
     start.add_argument("--must-keep", action="append", default=[])
     start.add_argument("--must-avoid", action="append", default=[])

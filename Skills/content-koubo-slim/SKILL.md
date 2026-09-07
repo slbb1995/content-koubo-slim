@@ -33,7 +33,7 @@ description: Content 口播 Slim 的唯一用户入口。用于开始、继续�
 ```json
 {
   "topic": "用户原始选题",
-  "references": ["1—5 篇本地参考"],
+  "references": [],
   "user_thoughts": null,
   "must_keep": [],
   "must_avoid": []
@@ -41,6 +41,8 @@ description: Content 口播 Slim 的唯一用户入口。用于开始、继续�
 ```
 
 可选显式提供 `binding_id`、`client_id`、`speaker_mode` 和本次 `profile`。默认先读取公共 Registry `~/.codex/.content-workflows/knowledge-base-registry.json`，没有公共配置时兼容旧 `.content-koubo-slim/client-registry.json`。公共与旧配置指向不一致时停止；不扫描电脑或猜测知识库。
+
+客户可以只给一段想法。`references` 为 0—5 篇本地 MD/TXT；没有参考不是输入错误，也不要求客户补结构编号。先区分用户要表达的观点和仅供 AI 执行的写作要求；`must_keep` 只放用户明确要求进入成稿的内容，不把“按这个结构写、先找同行”等操作指令当正文。
 
 `personal_ip` 支持选择当前知识库任意 active Profile。顺序是：本次明确指定 → 已确认的口播默认 → primary → 唯一 active → 要求选择；primary 只是默认。选中的 `profile_id`、对象引用和内容哈希进入 Run 身份，换 IP 必须新建 Run。
 
@@ -70,9 +72,9 @@ description: Content 口播 Slim 的唯一用户入口。用于开始、继续�
 
 1. 从公共或兼容旧 Registry 定位一个 Obsidian binding；飞书 binding 必须明确返回“不支持口播直接读取”，不得猜本地同步目录；
 2. 校验 Manifest、Profile 索引，解析 `speaker_mode` 和本次 Profile；
-3. 在创建 Run 前验证 1—5 篇参考可读，再根据冻结业务身份和参考来源集合生成受控 task-record，创建或恢复唯一 Run；
-4. create-only 冻结用户原始选题、参考集合、`binding_id`、`client_id`、`profile_id` 和 `speaker_mode`；
-5. 只从 Manifest 的 `method_root` 轻量检索 04，不依赖用户填写受众范围；最多 0—3 张同行内容资产和 0—2 张口播方法资产，可返回不同 `audience_scope`；无高相关结果时继续；
+3. 在创建 Run 前验证所有显式参考可读；显式给出的参考失效时停止，不静默切换库内来源；没有外部参考时进入库内选材；
+4. 调用 `$content-koubo-analyzer` 的选材阶段，用 `discover-methods` 返回的同库少量目录与完整候选做语义判断。先找同行的问题、观点和内容价值，再按需要结合结构；有外部参考时优先分析用户参考。入口只传递资料和选择结果，不亲自做语义分析。细则读 `references/idea-first-materials.md`；
+5. 将内部选择文件传给 `start --method-selection`；程序回读并校验最多 3 张同行、2 张方法和 3 份选材指引，冻结来源、哈希、原始想法和业务身份后创建或恢复 Run。有外部参考时 04 可空；无外部参考且没有可采用 04 时说明缺口并停止，不虚构素材；
 6. 把标准化参考和 04 候选交给 `$content-koubo-analyzer`，接收完整结果后生成一次 Gate A；
 7. Gate A 修改前由 AI 判断是否根本改变原始选题、目标受众、核心承诺、参考集合、客户或讲述者；根本变化时在现有 `respond-direction` 内部交接设置 `--task-identity-changed`，由程序要求新 Run；普通修改才在同一 Run 生成下一版，且 `direction_vN` 只消费同版本 `analyzer_input_vN`；
 8. 认可时冻结用户实际看到的同版本 Gate A 或其确定性投影，不采用时结束；
@@ -134,7 +136,8 @@ Gate A 只接受：`认可整版方向 / 需要修改 / 不采用`。正文确�
 - `scripts/content_koubo_slim.py`：方向、Context Pack、正文、配套版本与三次真人确认的编排；
 - `runtime/content_source.py`、`client_registry.py`、`client_manifest.py`：公共合同、独立配置器、知识库和任意 active Profile 选择；
 - `runtime/run_store.py`、`state_machine.py`：锁、单 Run、正文/配套版本和状态；
-- `runtime/reference_prep.py`：1—5 篇参考的独立准备；
+- `references/idea-first-materials.md`：一段话起步、内部语义选材和指引冻结；
+- `runtime/reference_prep.py`：0—5 篇显式参考的独立准备；
 - `runtime/vault_search.py`、`vault_reader.py`：Manifest 限定的 04 搜索/回读，以及 P3 授权 03 的局部检索和条件 05 回读；
 - `runtime/schema_validation.py`：Analyzer、Gate A、唯一 Context Pack、正文与配套输出边界；
 - `runtime/vault_save.py`：Manifest 授权输出根下的双文件 create-only 保存与回读；
