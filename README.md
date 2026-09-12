@@ -2,13 +2,17 @@
 
 Content 口播 Slim 是一套短视频口播内容工作流。
 
-它只做一件事：从明确或已确认默认的 Obsidian 知识库中选择本次 IP，把客户的一段想法结合少量内容资料写成口播，依次完成方向、正文、配套文案三次真人确认，最终只保存两份 Markdown，并保持未发布。有参考优先拆解参考；没有参考，由 Agent 从库内同行和方法中选材。
+它只做一件事：从明确或已确认默认的 Obsidian 知识库中选择本次 IP，把客户的一段想法结合少量内容资料写成口播，依次完成方向、正文、配套文案三次真人确认，每篇最终保存口播和配套两份 Markdown，并保持未发布。有参考优先拆解参考；没有参考，由 Agent 从库内同行和方法中选材。
+
+支持一次提出多篇口播要求：每篇分别拆解方向、确认、修改、生成配套和保存，同名标题也不会合并。多篇可集中展示供确认；未展示或未获明确确认的稿件不会自动推进。一个文档包含多篇对标时，按原文篇目准备参考，不把合集当成单篇。
+
+本次更新只涉及这五个口播 Skill。现有知识库资料、ZSK 和公众号流程不需要随本版本修改。内部批次与参考映射的执行说明分别见 [多篇任务](Skills/content-koubo-slim/references/batch-tasks.md) 和 [逐篇参考](Skills/content-koubo-slim/references/reference-pieces.md)。
 
 ## 仓库边界
 
 本仓库只包含 5 个 Content 口播 Slim Skill：
 
-- **content-koubo-slim**：唯一公开入口，管理同一个 Run、版本和三次真人确认；
+- **content-koubo-slim**：唯一公开入口，管理单篇或批次，每篇独立 Run、版本和三次真人确认；
 - **content-koubo-analyzer**：拆解参考并生成方向；
 - **content-koubo-context-retriever**：按已确认方向装配唯一 Context Pack；
 - **content-koubo-writer**：生成或修改纯口播正文；
@@ -51,7 +55,7 @@ Content 口播 Slim 是一套短视频口播内容工作流。
 
 | 版本 | Skill 数量 | 运行文件 | 状态 |
 |---|---:|---:|---|
-| 1.1.0 | 5 | 以 release manifest 为准 | 客户修订与 WorkBuddy 兼容修复版 |
+| 1.2.0 | 5 | 以 release manifest 为准 | 多篇任务、逐篇对标与交付检查 |
 
 ## 仓库结构
 

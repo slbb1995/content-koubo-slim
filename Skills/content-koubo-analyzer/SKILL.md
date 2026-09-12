@@ -24,7 +24,7 @@ description: Content 口播 Slim 的内部选材、拆解与方向 Skill。由�
 
 - `topic_original` 是用户原话；`topic_normalized` 只能由程序生成并标记 `topic_normalized_source=system_generated`，两者不能互换；
 - 输入不含用户填写的 `target_audience` 或 `target_audience_scope`；根据选题、参考和 04 候选判断受众，并在 Gate A 交给用户确认；
-- `references` 按 `REF-001...` 独立存在，不先拼成一篇；
+- `references` 按 `REF-001...` 独立存在，不先拼成一篇；同文档拆出的独立篇目也分别分析。发现输入仍混有多篇未划定边界时，退回入口按 `content-koubo-slim` 的 `references/reference-pieces.md` 准备，不用一条总括分析冒充逐篇拆解；
 - `method_candidates` 的 `asset_role` 只能是 `peer_content_asset` 或 `oral_method_asset`；
 - 04 候选经选材阶段语义选择和程序回读冻结；旧 CLI 也可能提供字面检索候选，泛词命中不等于相关。尊重页面真实用途、成熟度和核验范围，不以目录标签覆盖正文冲突；
 - `revision_request` 为空时生成首版；不为空时只按具体意见修普通方向，不改变冻结身份。

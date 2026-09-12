@@ -76,12 +76,18 @@ def _filename_stem(publish_title: str) -> str:
     return stem[:60].rstrip(" .")
 
 
-def _write_pair(targets: tuple[tuple[Path, bytes], tuple[Path, bytes]]) -> None:
-    if any(path.exists() or path.is_symlink() for path, _ in targets):
-        _fail("one or both target files already exist")
+def _write_pair(targets: tuple[tuple[Path, bytes], tuple[Path, bytes]], *, resume_identical: bool = False) -> None:
+    existing = set()
+    for path, payload in targets:
+        if path.exists() or path.is_symlink():
+            if not resume_identical or path.is_symlink() or not path.is_file() or path.read_bytes() != payload:
+                _fail("one or both target files already exist with unverified content")
+            existing.add(path)
     created: list[Path] = []
     try:
         for path, payload in targets:
+            if path in existing:
+                continue
             with path.open("xb") as handle:
                 handle.write(payload)
                 handle.flush()
@@ -109,6 +115,7 @@ def save_markdown_pair(
     package_markdown: str,
     now: datetime | None = None,
     draft_version: int = 1,
+    item_suffix: str | None = None,
 ) -> dict[str, Any]:
     """Save both final Markdown files or leave neither final file behind."""
 
@@ -123,13 +130,17 @@ def save_markdown_pair(
     if type(draft_version) is not int or draft_version < 1:
         _fail("draft version must be a positive integer")
     stem = _filename_stem(selected_publish_title)
+    if item_suffix is not None:
+        if not isinstance(item_suffix, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,39}-[0-9a-f]{32}", item_suffix):
+            _fail("batch item filename suffix is invalid")
+        stem = stem[:40].rstrip(" .") + f"-{item_suffix}"
     if draft_version > 1:
         stem += f"-第{draft_version}版"
     oral_path = target_dir / f"{stem}-口播稿.md"
     package_path = target_dir / f"{stem}-配套文案.md"
     oral_bytes = (oral_body + "\n").encode("utf-8")
     package_bytes = (package_markdown.rstrip() + "\n").encode("utf-8")
-    _write_pair(((oral_path, oral_bytes), (package_path, package_bytes)))
+    _write_pair(((oral_path, oral_bytes), (package_path, package_bytes)), resume_identical=item_suffix is not None)
     return {
         "oral_path": oral_path,
         "package_path": package_path,

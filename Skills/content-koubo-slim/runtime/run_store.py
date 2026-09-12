@@ -69,7 +69,7 @@ class RunStore:
             "reference_set_sha256",
         }
         common_required = legacy_required | {"binding_id", "profile_id"}
-        optional = {"library_input_sha256"}
+        optional = {"library_input_sha256", "batch_item_sha256"}
         if not isinstance(business_identity, dict) or frozenset(set(business_identity) - optional) not in {frozenset(legacy_required), frozenset(common_required)}:
             raise SlimRuntimeError(
                 "SLIM_TASK_KEY_UNTRUSTED",
@@ -104,6 +104,8 @@ class RunStore:
             )
         if "library_input_sha256" in business_identity and (not isinstance(business_identity["library_input_sha256"], str) or not TASK_DIGEST_PATTERN.fullmatch(business_identity["library_input_sha256"])):
             raise SlimRuntimeError("SLIM_TASK_KEY_UNTRUSTED", "run_store", detail="library input digest is invalid")
+        if "batch_item_sha256" in business_identity and (not isinstance(business_identity["batch_item_sha256"], str) or not TASK_DIGEST_PATTERN.fullmatch(business_identity["batch_item_sha256"])):
+            raise SlimRuntimeError("SLIM_TASK_KEY_UNTRUSTED", "run_store", detail="batch item identity is invalid")
         encoded = json.dumps(
             business_identity,
             ensure_ascii=False,
