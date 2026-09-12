@@ -108,6 +108,7 @@ def save_markdown_pair(
     oral_body: str,
     package_markdown: str,
     now: datetime | None = None,
+    draft_version: int = 1,
 ) -> dict[str, Any]:
     """Save both final Markdown files or leave neither final file behind."""
 
@@ -119,7 +120,11 @@ def save_markdown_pair(
     relative_dir = _render_template(output_template, client_id, timestamp)
     root = Path(output_root).resolve(strict=True)
     target_dir = _safe_directory(root, relative_dir)
+    if type(draft_version) is not int or draft_version < 1:
+        _fail("draft version must be a positive integer")
     stem = _filename_stem(selected_publish_title)
+    if draft_version > 1:
+        stem += f"-第{draft_version}版"
     oral_path = target_dir / f"{stem}-口播稿.md"
     package_path = target_dir / f"{stem}-配套文案.md"
     oral_bytes = (oral_body + "\n").encode("utf-8")

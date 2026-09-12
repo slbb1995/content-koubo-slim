@@ -39,7 +39,7 @@ def stable_id(prefix: str, *values: str) -> str:
 
 
 def default_common_registry_path() -> Path:
-    configured = os.environ.get("CODEX_HOME")
+    configured = os.environ.get("CONTENT_KOUBO_HOME") or os.environ.get("CODEX_HOME")
     root = Path(configured).expanduser() if configured else Path.home() / ".codex"
     return root / ".content-workflows" / "knowledge-base-registry.json"
 

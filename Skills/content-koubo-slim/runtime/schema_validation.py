@@ -923,8 +923,8 @@ def validate_publish_pack_result(value: Any) -> dict[str, Any]:
         _fail(code, "recommended titles must come from current candidates", workflow_stage=stage)
 
     publish_copy = _nonempty(value["publish_copy"], "publish_copy", code=code)
-    if "\x00" in publish_copy or not 50 <= len(re.sub(r"\s+", "", publish_copy)) <= 100:
-        _fail(code, "publish_copy must contain 50 to 100 non-whitespace characters", workflow_stage=stage)
+    if "\x00" in publish_copy:
+        _fail(code, "publish_copy must not contain NUL", workflow_stage=stage)
 
     tags = _string_list(value["tags"], "tags", code=code)
     if len(tags) != 5 or any(

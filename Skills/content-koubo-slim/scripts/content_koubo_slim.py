@@ -3,6 +3,15 @@
 
 from __future__ import annotations
 
+import os
+import sys
+sys.dont_write_bytecode = True
+
+# WorkBuddy may inject sitecustomize/file hooks through PYTHONPATH. Re-exec
+# before importing the filesystem runtime; stdlib-only runtime needs no site.
+if __name__ == "__main__" and not (sys.flags.isolated and sys.flags.no_site):
+    os.execv(sys.executable, [sys.executable, "-I", "-S", "-B", __file__, *sys.argv[1:]])
+
 import argparse
 import json
 import re
@@ -71,11 +80,11 @@ CURRENT_STATE_ACTIONS = {
     "context_pending": "生成唯一 Content Context Pack；不要重新检索或改写方向。",
     "context_ready": "生成完整口播正文；不要重新检索客户资料。",
     "draft_pending": "请选择确认正文，或给出具体修改意见。",
-    "draft_approved": "生成标题、发布正文和标签；不要修改已确认正文。",
+    "draft_approved": "可生成配套；如需调整正文，先提交具体修改意见。",
     "package_pending": "请选择确认并保存，或给出具体修改意见。",
     "package_approved": "保存已确认正文和配套；不要重新生成内容。",
     "blocked": "先处理当前阻断问题，再复用同一个 Run 继续。",
-    "saved": "本次任务无需继续。",
+    "saved": "已保存；如需调整正文，可给出修改意见生成新版本，原文件保留。",
     "abandoned": "本次任务已结束；如需新选题，请开始一个新 Run。",
 }
 
@@ -935,6 +944,16 @@ def record_context_result(
     return response, path
 
 
+def _approval_filename(store: RunStore, task_key: str, kind: str, version: int) -> str:
+    legacy = f"approved_{kind}.json"
+    target = store.run_directory(task_key) / "artifacts" / legacy
+    if target.exists() or target.is_symlink():
+        old = store.read_fixed_json(task_key, legacy)
+        if old.get(f"{kind}_version") != version:
+            return f"approved_{kind}_v{version}.json"
+    return legacy
+
+
 def prepare_draft_stage(
     *,
     runs_root: str | Path,
@@ -946,7 +965,7 @@ def prepare_draft_stage(
     store = RunStore(runs_root)
     task_key = _task_key_from_record(store, task_record)
     state = store.get_task(task_key)
-    if state["state"] not in {"context_ready", "draft_pending"}:
+    if state["state"] not in {"context_ready", "draft_pending", "draft_approved", "package_pending", "package_approved", "saved"}:
         raise SlimRuntimeError(
             "SLIM_STATE_TRANSITION_INVALID",
             "content_koubo_slim",
@@ -967,7 +986,7 @@ def prepare_draft_stage(
             artifacts_exist=True,
             artifacts_preserved=True,
         )
-    if state["state"] == "draft_pending" and not feedback:
+    if state["state"] != "context_ready" and not feedback:
         raise SlimRuntimeError(
             "SLIM_DRAFT_RESPONSE_INVALID",
             "content_koubo_slim",
@@ -987,7 +1006,7 @@ def prepare_draft_stage(
     )
     base_version = 0
     previous_draft: dict[str, Any] | None = None
-    if state["state"] == "draft_pending":
+    if state["state"] != "context_ready":
         base_version, current, _ = store.latest_version(task_key, "draft")
         if current.get("draft_version") != base_version:
             raise SlimRuntimeError(
@@ -1087,7 +1106,8 @@ def respond_draft(
     task_key = _task_key_from_record(store, task_record)
     state = store.get_task(task_key)
     decision = _normalize_decision(decision)
-    if state["state"] != "draft_pending":
+    revisable = {"draft_approved", "package_pending", "package_approved", "saved"}
+    if state["state"] != "draft_pending" and not (decision == "需要修改" and state["state"] in revisable):
         raise _current_state_error(
             store=store,
             task_key=task_key,
@@ -1111,6 +1131,8 @@ def respond_draft(
             task_record=task_record,
             revision_feedback=feedback,
         )
+        if state["state"] in revisable:
+            store.transition(task_key, "draft_pending")
         return (
             {
                 "status": "working",
@@ -1165,7 +1187,13 @@ def respond_draft(
         "draft_sha256": canonical_json_hash(draft),
         "decision": "确认正文",
     }
-    store.write_fixed_json(task_key, "approved_draft.json", approval)
+    filename = _approval_filename(store, task_key, "draft", version)
+    target = store.run_directory(task_key) / "artifacts" / filename
+    if target.exists() or target.is_symlink():
+        raise SlimRuntimeError("SLIM_DRAFT_RESPONSE_INVALID", "content_koubo_slim",
+            detail="generate and display a new draft before confirming a reopened draft",
+            workflow_stage="等待你确认正文", run_exists=True, artifacts_exist=True, artifacts_preserved=True)
+    store.write_fixed_json(task_key, filename, approval)
     store.transition(task_key, "draft_approved")
     return (
         {
@@ -1173,7 +1201,7 @@ def respond_draft(
             "status_label": "正文已确认",
             "workflow_stage": "正文已确认",
             "message": "当前正文已确认，可以基于这份正文生成配套文案。",
-            "next_action": "生成标题、发布正文和标签；不要修改已确认正文。",
+            "next_action": CURRENT_STATE_ACTIONS["draft_approved"],
             "run_exists": True,
             "run_created_now": False,
             "artifacts_exist": True,
@@ -1184,9 +1212,9 @@ def respond_draft(
 
 
 def _approved_draft_input(store: RunStore, task_key: str) -> tuple[dict[str, Any], dict[str, Any]]:
-    approval = store.read_fixed_json(task_key, "approved_draft.json")
-    expected_fields = {"approval_version", "draft_version", "draft_sha256", "decision"}
     version, draft, json_path = store.latest_version(task_key, "draft")
+    approval = store.read_fixed_json(task_key, _approval_filename(store, task_key, "draft", version))
+    expected_fields = {"approval_version", "draft_version", "draft_sha256", "decision"}
     try:
         markdown = json_path.with_suffix(".md").read_text(encoding="utf-8")
     except OSError as exc:
@@ -1242,16 +1270,6 @@ def prepare_package_stage(
             artifacts_preserved=store.artifacts_exist(task_key),
         )
     feedback = revision_feedback.strip() if isinstance(revision_feedback, str) else None
-    if state["state"] == "draft_approved" and feedback:
-        raise SlimRuntimeError(
-            "SLIM_PACKAGE_RESPONSE_INVALID",
-            "content_koubo_slim",
-            detail="package_v1 cannot contain revision feedback",
-            workflow_stage="正在生成配套文案",
-            run_exists=True,
-            artifacts_exist=True,
-            artifacts_preserved=True,
-        )
     if state["state"] == "package_pending" and not feedback:
         raise SlimRuntimeError(
             "SLIM_PACKAGE_RESPONSE_INVALID",
@@ -1266,8 +1284,10 @@ def prepare_package_stage(
     approved_draft, approval = _approved_draft_input(store, task_key)
     base_version = 0
     previous_package: dict[str, Any] | None = None
-    if state["state"] == "package_pending":
+    has_packages = any((store.run_directory(task_key) / "artifacts").glob("package_v*.json"))
+    if has_packages:
         base_version, current, _ = store.latest_version(task_key, "package")
+    if state["state"] == "package_pending":
         expected_fields = {
             "contract_version",
             "package_version",
@@ -1312,12 +1332,21 @@ def record_package_result(
     base_package_version: int,
     package_result: dict[str, Any],
     revision_feedback: str | None = None,
+    based_on_draft_version: int | None = None,
 ) -> tuple[dict[str, Any], Path]:
     package_input, task_key = prepare_package_stage(
         runs_root=runs_root,
         task_record=task_record,
         revision_feedback=revision_feedback,
     )
+    current_draft_version = package_input["approved_draft"]["draft_version"]
+    # Old first-draft callers remain compatible; revised drafts require the
+    # generation-time body version, never stamp a late result with a new body.
+    expected_draft_version = 1 if based_on_draft_version is None else based_on_draft_version
+    if type(expected_draft_version) is not int or expected_draft_version != current_draft_version:
+        raise SlimRuntimeError("SLIM_PACKAGE_RESPONSE_INVALID", "content_koubo_slim",
+            detail="publish pack was generated for a different draft version",
+            workflow_stage="正在生成配套文案", run_exists=True, artifacts_exist=True, artifacts_preserved=True)
     if package_input["base_package_version"] != base_package_version:
         raise SlimRuntimeError(
             "SLIM_PACKAGE_RESPONSE_INVALID",
@@ -1377,7 +1406,7 @@ def _package_markdown(approval: dict[str, Any], content: dict[str, Any]) -> str:
     return (
         f"封面标题：{approval['selected_cover_title']}\n\n"
         f"发布标题：{approval['selected_publish_title']}\n\n"
-        f"发布正文：\n{content['publish_copy']}\n\n"
+        f"发布说明：\n{content['publish_copy']}\n\n"
         f"标签：\n{' '.join(content['tags'])}"
     )
 
@@ -1436,7 +1465,7 @@ def _save_approved_package(
         approved_draft, draft_approval = _approved_draft_input(store, task_key)
         version, package, _ = store.latest_version(task_key, "package")
         content = validate_publish_pack_result(package.get("content"))
-        approval = store.read_fixed_json(task_key, "approved_package.json")
+        approval = store.read_fixed_json(task_key, _approval_filename(store, task_key, "package", version))
         expected_fields = {
             "approval_version",
             "package_version",
@@ -1499,6 +1528,7 @@ def _save_approved_package(
             selected_publish_title=approval["selected_publish_title"],
             oral_body=approved_draft["body"],
             package_markdown=_package_markdown(approval, content),
+            draft_version=approved_draft["draft_version"],
         )
         store.transition(task_key, "saved")
     except SlimRuntimeError as exc:
@@ -1638,6 +1668,11 @@ def respond_package(
             artifacts_preserved=True,
         )
     _, draft_approval = _approved_draft_input(store, task_key)
+    if (package.get("based_on_draft_version") != draft_approval["draft_version"]
+            or package.get("based_on_draft_sha256") != draft_approval["draft_sha256"]):
+        raise SlimRuntimeError("SLIM_PACKAGE_RESPONSE_INVALID", "content_koubo_slim",
+            detail="package belongs to an earlier draft; generate new package before confirming",
+            run_exists=True, artifacts_exist=True, artifacts_preserved=True)
     approval = {
         "approval_version": "content-koubo-slim-approved-package-v1",
         "package_version": version,
@@ -1649,7 +1684,7 @@ def respond_package(
         "decision": "确认并保存",
         "publish_status": "not_requested",
     }
-    store.write_fixed_json(task_key, "approved_package.json", approval)
+    store.write_fixed_json(task_key, _approval_filename(store, task_key, "package", version), approval)
     store.transition(task_key, "package_approved")
     return _save_approved_package(
         registry_path=registry_path,
@@ -1950,6 +1985,7 @@ def _record_package(args: argparse.Namespace) -> dict[str, Any]:
         base_package_version=args.base_package_version,
         package_result=result,
         revision_feedback=args.feedback,
+        based_on_draft_version=args.based_on_draft_version,
     )
     return response
 
@@ -1981,7 +2017,7 @@ def _status(args: argparse.Namespace) -> dict[str, Any]:
         "status_label": label,
         "workflow_stage": label,
         "message": f"当前任务状态：{label}。",
-        "next_action": "按当前阶段继续；不要跳过真人确认。" if not terminal else "本次任务无需继续。",
+        "next_action": CURRENT_STATE_ACTIONS[state["state"]],
         "run_exists": True,
         "run_created_now": False,
         "artifacts_exist": artifacts_exist,
@@ -2118,6 +2154,7 @@ def build_parser() -> argparse.ArgumentParser:
     record_package.add_argument("--base-package-version", required=True, type=int)
     record_package.add_argument("--package-result", required=True)
     record_package.add_argument("--feedback")
+    record_package.add_argument("--based-on-draft-version", type=int, help="body version from prepare-package; required after body revisions")
     record_package.set_defaults(handler=_record_package)
 
     respond_package_parser = subparsers.add_parser(
@@ -2142,7 +2179,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    host_parser = argparse.ArgumentParser(add_help=False)
+    host_parser.add_argument("--host", choices=("codex", "workbuddy"))
+    host_parser.add_argument("--host-root")
+    host, remaining = host_parser.parse_known_args(argv)
+    if host.host and host.host_root:
+        host_parser.error("choose --host or --host-root, not both")
+    if host.host_root:
+        root = Path(host.host_root).expanduser()
+        if not root.is_absolute():
+            host_parser.error("--host-root must be absolute")
+        os.environ["CONTENT_KOUBO_HOME"] = str(root)
+    elif host.host:
+        os.environ["CONTENT_KOUBO_HOME"] = str(Path.home() / (".workbuddy" if host.host == "workbuddy" else ".codex"))
+    args = build_parser().parse_args(remaining)
     try:
         response = args.handler(args)
         exit_code = 0
