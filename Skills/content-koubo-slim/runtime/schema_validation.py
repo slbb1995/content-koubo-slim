@@ -883,8 +883,18 @@ def validate_writer_result(value: Any) -> tuple[dict[str, Any], str]:
             _fail(code, "Paragraph text is empty or contains a hidden paragraph", workflow_stage=stage)
         if re.search(r"(?m)^\s*#{1,6}\s+", text) or "```" in text:
             _fail(code, "Draft contains Markdown or code-fence packaging", workflow_stage=stage)
+        if re.search(r"<\s*/?\s*(?:think|analysis|reasoning|tool_call)\b[^>]*>", text, re.I):
+            _fail(code, "Draft contains process or tool markup", workflow_stage=stage)
         normalized.append({"text": text})
     body = "\n\n".join(item["text"] for item in normalized)
+    # A structural guard, not a substitute for the entrypoint's semantic count check.
+    labels = re.findall(
+        r"(?:^|\n)\s*(?:第\s*([0-9一二三四五六七八九十百]+)\s*(?:[版稿篇]|条口播(?:文案|稿)?)|"
+        r"(?:脚本|口播文案|口播稿?)\s*([0-9一二三四五六七八九十百A-Z]+))\s*[：:、.．]",
+        body, re.I,
+    )
+    if len({a or b for a, b in labels}) > 1:
+        _fail(code, "Several script alternatives were bundled into one draft; use separate batch items", workflow_stage=stage)
     return {"paragraphs": normalized}, body
 
 

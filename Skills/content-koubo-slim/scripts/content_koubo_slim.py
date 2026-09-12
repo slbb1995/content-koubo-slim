@@ -59,6 +59,7 @@ from runtime.schema_validation import (
 )
 from runtime.state_machine import SlimStateMachine
 from runtime.vault_save import save_markdown_pair
+from runtime.batch_tasks import start_request, batch_status, validate_single_request, batch_item_digest, save_suffix
 from runtime.vault_reader import (
     read_knowledge_asset,
     read_method_asset,
@@ -255,7 +256,10 @@ def prepare_direction_stage(
     planning_guidance: list[dict[str, Any]] | None = None,
     audience_scope: str | None = None,
     allow_experimental: bool = False,
+    output_count: int = 1,
+    batch_item: dict[str, str] | None = None,
 ) -> tuple[dict[str, Any], str]:
+    validate_single_request(output_count, batch_item)
     if not isinstance(topic_original, str) or not topic_original.strip():
         raise SlimRuntimeError(
             "SLIM_ANALYZER_INPUT_INVALID",
@@ -336,6 +340,8 @@ def prepare_direction_stage(
             "candidates": candidates, "user_thoughts": user_thoughts,
             "must_keep": must_keep, "must_avoid": must_avoid,
             "audience_scope": audience_scope, "allow_experimental": allow_experimental, "planning_guidance": guidance})
+    if batch_item is not None:
+        business_identity["batch_item_sha256"] = batch_item_digest(batch_item)
     store = RunStore(runs_root)
     state, created, task_key = store.start_program_task(
         business_identity=business_identity,
@@ -400,6 +406,8 @@ def prepare_direction_stage(
         frozen_input["audience_scope"] = audience_scope
         frozen_input["allow_experimental"] = allow_experimental
         frozen_input["planning_guidance"] = guidance
+    if batch_item is not None:
+        frozen_input["batch_item"] = batch_item
     store.freeze_task_input(task_key, frozen_input)
     analyzer_input = validate_analyzer_input(
         {
@@ -1521,7 +1529,7 @@ def _save_approved_package(
             manifest=manifest,
         )
         output_root = resolve_asset_root(location.vault_root, manifest, "output")
-        save_markdown_pair(
+        saved_pair = save_markdown_pair(
             output_root=output_root,
             output_template=manifest.output_template,
             client_id=frozen.get("profile_id") or frozen["client_id"],
@@ -1529,7 +1537,11 @@ def _save_approved_package(
             oral_body=approved_draft["body"],
             package_markdown=_package_markdown(approval, content),
             draft_version=approved_draft["draft_version"],
+            item_suffix=save_suffix(frozen.get("batch_item")),
         )
+        if frozen.get("batch_item") is not None:
+            store.write_fixed_json(task_key, f"saved_pair_v{approved_draft['draft_version']}.json",
+                {key: str(value) if isinstance(value, Path) else value for key, value in saved_pair.items()})
         store.transition(task_key, "saved")
     except SlimRuntimeError as exc:
         current = store.get_task(task_key)
@@ -1706,7 +1718,7 @@ def _start(args: argparse.Namespace) -> dict[str, Any]:
                 selections = selections["materials"]
         except (OSError, UnicodeError, ValueError) as exc:
             raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "content_koubo_slim", detail=str(exc)) from exc
-    response, _ = prepare_direction_stage(
+    request = dict(
         registry_path=args.registry,
         runs_root=args.runs_root,
         client_id=args.client_id,
@@ -1723,7 +1735,7 @@ def _start(args: argparse.Namespace) -> dict[str, Any]:
         audience_scope=args.audience_scope,
         allow_experimental=args.allow_experimental,
     )
-    return response
+    return start_request(prepare_direction_stage, request, output_count=args.output_count, plan_path=args.batch_plan)
 
 
 def _discover_methods(args: argparse.Namespace) -> dict[str, Any]:
@@ -2071,7 +2083,14 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--user-thoughts")
     start.add_argument("--must-keep", action="append", default=[])
     start.add_argument("--must-avoid", action="append", default=[])
+    start.add_argument("--output-count", type=int, default=1)
+    start.add_argument("--batch-plan", help="internal JSON plan for independent deliverables")
     start.set_defaults(handler=_start)
+
+    batch = subparsers.add_parser("batch-status", help="internal: verify batch progress and saved files")
+    _add_runs_root_argument(batch)
+    batch.add_argument("--batch-id", required=True)
+    batch.set_defaults(handler=lambda args: batch_status(RunStore(args.runs_root), args.batch_id))
 
     record = subparsers.add_parser("record-direction", help="internal: validate Analyzer result")
     _add_runs_root_argument(record)
