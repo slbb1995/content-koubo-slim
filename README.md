@@ -51,7 +51,7 @@ Content 口播 Slim 是一套短视频口播内容工作流。
 
 | 版本 | Skill 数量 | 运行文件 | 状态 |
 |---|---:|---:|---|
-| 1.0.0 | 5 | 以 release manifest 为准 | `content-source-v1` 多 IP 正式版 |
+| 1.1.0 | 5 | 以 release manifest 为准 | 客户修订与 WorkBuddy 兼容修复版 |
 
 ## 仓库结构
 
@@ -211,6 +211,30 @@ Codex 默认使用：
 选材不是按关键词机械套模板。入口把授权目录与完整候选交给内部 Analyzer 语义判断；最多采用 3 张同行、2 张方法，另可冻结 3 份选材指引。同行不是当前客户的经历或服务承诺；索引、实验项、过期资料不能混成已核验事实。没有可用来源时说明实际缺口；明确给出却读不了的参考必须先解决，不能静默绕过。
 
 内部接口为 `discover-methods` → 完整回读候选 → `start --method-selection`。选择文件只供 Agent 使用，详见 `Skills/content-koubo-slim/references/idea-first-materials.md`。旧 CLI 不传选择文件仍保留字面检索兼容；旧 Run、三次真人确认、唯一 Context 和双文件未发布保存不变。
+
+## 1.1.0 修复内容
+
+- 已确认或已保存的正文支持在原任务继续改稿。旧稿、旧确认及原保存文件保留；新正文和配套分别重新确认，修订版文件名带版本号。
+- 发布说明的 50—100 字改为默认建议，允许明确要求更短、更长、分段；不影响口播时长。
+- 普通评论交流和观点收尾不再被商业转化授权规则一并禁止；私信、领取、预约等动作仍按用户授权和事实依据处理。
+- CLI 自动以隔离 Python 重启，避免宿主 PYTHONPATH/sitecustomize 钩子影响本地文件读写。显式区分宿主配置目录，不修改用户全局 Python 环境。
+- 具体产品/服务结论必须保留适用条件和对应事实依据；知识库没有依据时说明缺口，不把同行观点当成已核验业务事实。
+
+## 更新到修复版
+
+在仓库目录先检查 `git status --short`。有本地改动先保留并比较，不覆盖；干净时运行 `git pull --ff-only`，然后 `python3 tools/verify.py`。
+
+验证通过后，完整更新上述 5 个 Skill 目录，并先将旧目录备份到宿主不加载的位置。保留知识库、Registry、Manifest、Profile 索引和历史任务，不把 Git 拉取成功当作安装完成。更新后按 release manifest 逐文件核对实际宿主目录。
+
+WorkBuddy 调用入口时使用：
+
+```bash
+python3 Skills/content-koubo-slim/scripts/content_koubo_slim.py --host workbuddy --help
+```
+
+Codex 使用 `--host codex`；自定义安装环境使用 `--host-root /已确认的宿主目录`。这些参数适用于全部子命令，宿主根决定默认配置和任务目录；显式 `--registry`、`--runs-root` 仍优先。使用已安装副本时将脚本位置改为宿主实际 Skills 根。`configure`、`start`、`status` 和继续任务必须保持同一宿主。不要把示例路径原样当成客户路径。
+
+客户可以直接说“把刚才确认的稿子扩写一些，保留原版”，入口会继续原任务；新正文确认前不能拿旧配套完成新版保存。
 
 ## 更新与安全边界
 

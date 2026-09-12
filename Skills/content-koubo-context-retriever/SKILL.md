@@ -75,3 +75,7 @@ P3 不新增真人确认点。Gate A 已完成；本 Skill 生成 Context Pack �
 - `schemas/content-context.schema.json`：唯一正式 Context Pack 字段。
 
 设计原因保存在 Factory 设计卡；确定性实现位于 `content-koubo-slim/runtime/`。不要把 Runtime 或完整 Schema 复制回本文件。
+
+## 具体业务事实的适用性
+
+03 为空只允许一般性内容继续。方向包含具体产品责任、金额、退款、补贴、适用条件等结论时，逐项确认选中片段足以支撑且适用版本明确；同行方法和过期资料不能填补事实缺口。核心结论缺依据时向入口报清楚缺哪条依据，不能静默换题，也不能给 Writer 一份看似齐全的空事实包。用户已否定或停用的内容保持该限制。
