@@ -5,10 +5,10 @@
   },
   "package": {
     "id": "content-v2-slim",
-    "version": "0.11.0-rc.4"
+    "version": "0.11.0-rc.5"
   },
   "runtime": {
-    "file_count": 34,
+    "file_count": 36,
     "files": [
       {
         "bytes": 6637,
@@ -95,24 +95,31 @@
         "skill": "content-publish-pack"
       },
       {
-        "bytes": 11063,
+        "bytes": 12608,
         "mode": "0644",
         "path": "Skills/content-slim/SKILL.md",
-        "sha256": "280da5ba39cf1cb74e0b235423949cd6e6d16e85b186ccd27da20c8ddf44dac8",
+        "sha256": "e929af44c92830b06ebbb4ce549d4741c2e806638e4fa442715e95878618f355",
         "skill": "content-slim"
       },
       {
-        "bytes": 762,
+        "bytes": 427,
         "mode": "0644",
         "path": "Skills/content-slim/agents/openai.yaml",
-        "sha256": "caeb31279c660f973239b63ac4c74d04e496c9e4711a527d82f4c425ccdbbc69",
+        "sha256": "681a52278d4438148895cbb4f35f1067c3dbe5212ac7ebe623da4feabcc31d0b",
         "skill": "content-slim"
       },
       {
-        "bytes": 1591,
+        "bytes": 1856,
         "mode": "0644",
         "path": "Skills/content-slim/runtime/__init__.py",
-        "sha256": "3d4e35cc4890bdf192d92b8962f0feb3bb9ea6dd9ee8651f62c1988d5986a709",
+        "sha256": "bc9b5dbe89fb4cec668b8d463bb3f13c350adde9fdc522eedf03dc16b9630785",
+        "skill": "content-slim"
+      },
+      {
+        "bytes": 21277,
+        "mode": "0644",
+        "path": "Skills/content-slim/runtime/binding_setup.py",
+        "sha256": "388ed339ca2b01a2803c491b2e53f9e161bc51146c677b48a555b21a74fecd91",
         "skill": "content-slim"
       },
       {
@@ -200,6 +207,13 @@
         "skill": "content-slim"
       },
       {
+        "bytes": 2042,
+        "mode": "0644",
+        "path": "Skills/content-slim/scripts/configure_client.py",
+        "sha256": "2a53c96c553b9f8dd0d3d5c4c19bc2e2fb1d08f46c4fc30575457d9791c2fc5b",
+        "skill": "content-slim"
+      },
+      {
         "bytes": 71373,
         "mode": "0644",
         "path": "Skills/content-slim/scripts/content_slim.py",
@@ -258,12 +272,12 @@
       "content-slim",
       "content-writer"
     ],
-    "tree_sha256": "7d913c56ead08be78e458e09f74cbbb2dd98ff0c60c84878d1ab24ad78d0a94d"
+    "tree_sha256": "1883dd2e422b0a3675b95ea9a1dd8a1f88b3c27c0a01e30cd0527edb84eacae1"
   },
   "schema_version": "content-v2-slim-release-v1",
   "source": {
-    "commit": "e86b1d419e1c0704e731b6505ac1393cce9f527d",
-    "selection_path": "packages/content-v2-slim.json",
-    "tree": "c832b431c7d5744c0df9afd2566b7a259f883530"
+    "base_commit": "512c60c13a3c9df4db78a2f78ec7b07add5c0ae3",
+    "selection_path": "Skills/",
+    "tree_sha256": "1883dd2e422b0a3675b95ea9a1dd8a1f88b3c27c0a01e30cd0527edb84eacae1"
   }
 }

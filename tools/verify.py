@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
-"""Verify Content Slim, ZSK, and their Obsidian bridge."""
+"""Verify the standalone Content Slim release."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+from pathlib import Path
 import subprocess
 import sys
-import tempfile
-from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ZSK_PACKAGE = ROOT / "Packages" / "zsk-knowledge-base"
 CONTENT_SKILLS = {
-    "content-slim", "content-analyzer", "content-context-retriever",
-    "content-writer", "content-publish-pack",
+    "content-slim",
+    "content-analyzer",
+    "content-context-retriever",
+    "content-writer",
+    "content-publish-pack",
 }
-ZSK_SKILLS = {"zsk-router", "zsk-ruku", "zsk-zhishi", "zsk-duibiao", "zsk-profile"}
 
 
 def sha256(path: Path) -> str:
@@ -29,166 +30,199 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def verify_content() -> None:
-    for line in (ROOT / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
+def runtime_tree_sha256(files: list[dict[str, Any]]) -> str:
+    digest = hashlib.sha256()
+    for item in sorted(files, key=lambda value: value["path"]):
+        digest.update(
+            f"{item['path']}\0{item['sha256']}\n".encode("utf-8")
+        )
+    return digest.hexdigest()
+
+
+def checksum_map() -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in (ROOT / "SHA256SUMS").read_text(
+        encoding="utf-8"
+    ).splitlines():
         expected, relative = line.split(maxsplit=1)
-        path = ROOT / relative.lstrip("* ")
-        if not path.is_file() or path.is_symlink() or sha256(path) != expected:
-            raise RuntimeError(f"Content Slim checksum mismatch: {relative}")
-    manifest = json.loads((ROOT / "release-manifest.json").read_text(encoding="utf-8"))
-    if manifest.get("package") != {"id": "content-v2-slim", "version": "0.11.0-rc.4"}:
-        raise RuntimeError("unexpected Content Slim package identity")
+        normalized = relative.lstrip("* ")
+        if normalized in values:
+            raise RuntimeError(f"duplicate checksum path: {normalized}")
+        values[normalized] = expected
+    return values
+
+
+def runtime_paths() -> set[str]:
+    paths: set[str] = set()
+    for skill in CONTENT_SKILLS:
+        root = ROOT / "Skills" / skill
+        for path in root.rglob("*"):
+            if path.is_symlink():
+                raise RuntimeError(f"runtime symlink is forbidden: {path}")
+            if not path.is_file():
+                continue
+            if path.name == "__pycache__" or path.suffix in {".pyc", ".pyo"}:
+                raise RuntimeError(f"generated runtime file found: {path}")
+            paths.add(path.relative_to(ROOT).as_posix())
+    return paths
+
+
+def verify_content() -> tuple[str, int]:
+    version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    manifest = json.loads(
+        (ROOT / "release-manifest.json").read_text(encoding="utf-8")
+    )
+    if manifest.get("package") != {
+        "id": "content-v2-slim",
+        "version": version,
+    }:
+        raise RuntimeError("release manifest and VERSION differ")
+
     runtime = manifest.get("runtime", {})
     files = runtime.get("files", [])
-    if runtime.get("file_count") != 34 or len(files) != 34:
-        raise RuntimeError("Content Slim must contain exactly 34 runtime files")
-    if {item.get("skill") for item in files} != CONTENT_SKILLS:
+    if not isinstance(files, list) or not files:
+        raise RuntimeError("runtime file list is missing")
+    if runtime.get("file_count") != len(files):
+        raise RuntimeError("runtime file count is inconsistent")
+    if runtime.get("skill_count") != len(CONTENT_SKILLS):
+        raise RuntimeError("Content Slim must contain exactly five skills")
+    if set(runtime.get("skills", [])) != CONTENT_SKILLS:
         raise RuntimeError("unexpected Content Slim skill set")
+    if {item.get("skill") for item in files} != CONTENT_SKILLS:
+        raise RuntimeError("runtime files contain an unexpected skill")
+
+    actual_skills = {
+        path.parent.name for path in (ROOT / "Skills").glob("*/SKILL.md")
+    }
+    if actual_skills != CONTENT_SKILLS:
+        raise RuntimeError(
+            "repository must contain only the five Content Slim skills"
+        )
+    manifest_paths = {item["path"] for item in files}
+    actual_paths = runtime_paths()
+    if len(manifest_paths) != len(files) or manifest_paths != actual_paths:
+        raise RuntimeError("runtime files and release manifest differ")
+    sums = checksum_map()
+    if set(sums) != actual_paths:
+        raise RuntimeError("SHA256SUMS does not match runtime paths")
+
     for item in files:
         path = ROOT / item["path"]
-        if not path.is_file() or path.is_symlink():
-            raise RuntimeError(f"missing Content Slim runtime file: {item['path']}")
-        if path.stat().st_size != item["bytes"] or sha256(path) != item["sha256"]:
-            raise RuntimeError(f"Content Slim manifest mismatch: {item['path']}")
+        digest = sha256(path) if path.is_file() else ""
+        if (
+            not path.is_file()
+            or path.is_symlink()
+            or item.get("mode") != "0644"
+            or path.stat().st_size != item["bytes"]
+            or digest != item["sha256"]
+            or sums[item["path"]] != digest
+        ):
+            raise RuntimeError(
+                f"Content Slim manifest mismatch: {item['path']}"
+            )
 
-
-def verify_zsk() -> None:
-    manifest = json.loads((ZSK_PACKAGE / "zsk-manifest.json").read_text(encoding="utf-8"))
-    expected = {
-        "package_id": "zsk-knowledge-base",
-        "version": "0.2.2-stage11-preview",
-        "skills": ["zsk-router", "zsk-ruku", "zsk-zhishi", "zsk-duibiao", "zsk-profile"],
-        "support": ["shared"],
-    }
-    for key, value in expected.items():
-        if manifest.get(key) != value:
-            raise RuntimeError(f"unexpected ZSK {key}")
-    files = manifest.get("files", [])
-    if len(files) != 28:
-        raise RuntimeError("ZSK must contain exactly 28 runtime files")
-    for item in files:
-        path = ZSK_PACKAGE / "Skills" / item["path"]
-        if not path.is_file() or path.is_symlink() or sha256(path) != item["sha256"]:
-            raise RuntimeError(f"ZSK manifest mismatch: {item['path']}")
-    actual = {path.parent.name for path in (ZSK_PACKAGE / "Skills").glob("zsk-*/SKILL.md")}
-    if actual != ZSK_SKILLS:
-        raise RuntimeError("unexpected ZSK skill directories")
+    packages = ROOT / "Packages"
+    if packages.exists() and any(packages.rglob("*")):
+        raise RuntimeError(
+            "standalone Content Slim must not contain bundled packages"
+        )
+    tree = runtime_tree_sha256(files)
+    if runtime.get("tree_sha256") != tree:
+        raise RuntimeError("runtime tree hash is inconsistent")
+    source = manifest.get("source", {})
+    if (
+        source.get("selection_path") != "Skills/"
+        or source.get("tree_sha256") != tree
+    ):
+        raise RuntimeError("release source metadata is inconsistent")
+    return version, len(files)
 
 
 def verify_examples_and_cli() -> None:
     sys.dont_write_bytecode = True
     content_root = ROOT / "Skills" / "content-slim"
     sys.path.insert(0, str(content_root))
+
     from runtime.client_manifest import validate_manifest
     from runtime.client_registry import load_registry
 
-    for name, client_id in (
-        ("content-client-manifest.example.json", "my-content"),
-        ("zsk-content-client-manifest.example.json", "my-zsk-vault"),
-    ):
-        data = json.loads((ROOT / "examples" / name).read_text(encoding="utf-8"))
-        validate_manifest(data, expected_client_id=client_id)
-    for name in ("client-registry.example.json", "zsk-content-client-registry.example.json"):
-        load_registry(ROOT / "examples" / name)
+    manifest_data = json.loads(
+        (
+            ROOT / "examples" / "content-client-manifest.example.json"
+        ).read_text(encoding="utf-8")
+    )
+    validate_manifest(manifest_data, expected_client_id="my-content")
+    load_registry(ROOT / "examples" / "client-registry.example.json")
+
+    env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    checks = (
+        (
+            content_root / "scripts" / "content_slim.py",
+            "Content V2 Slim runtime entry",
+        ),
+        (
+            content_root / "scripts" / "configure_client.py",
+            "Content Slim 一次持久绑定",
+        ),
+    )
+    for script, expected in checks:
+        result = subprocess.run(
+            [sys.executable, "-B", str(script), "--help"],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0 or expected not in result.stdout:
+            raise RuntimeError(f"CLI smoke test failed: {script}")
+
+
+def verify_tests() -> None:
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     result = subprocess.run(
-        [sys.executable, "-B", str(content_root / "scripts" / "content_slim.py"), "--help"],
-        cwd=ROOT, env=env, capture_output=True, text=True, check=False,
+        [
+            sys.executable,
+            "-B",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests",
+            "-v",
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
     )
-    if result.returncode != 0 or "Content V2 Slim runtime entry" not in result.stdout:
-        raise RuntimeError("Content Slim CLI smoke test failed")
-
-
-def verify_zsk_delivery() -> None:
-    tool = ZSK_PACKAGE / "tools" / "zsk_delivery.py"
-    env = os.environ.copy()
-    env["PYTHONDONTWRITEBYTECODE"] = "1"
-    with tempfile.TemporaryDirectory(prefix="zsk-public-host-") as directory:
-        install = subprocess.run(
-            [sys.executable, "-B", str(tool), "install", "--host-root", directory, "--package", str(ZSK_PACKAGE)],
-            env=env, capture_output=True, text=True, check=False,
-        )
-        doctor = subprocess.run(
-            [sys.executable, "-B", str(tool), "doctor", "--host-root", directory],
-            env=env, capture_output=True, text=True, check=False,
-        )
-        if install.returncode != 0 or json.loads(install.stdout).get("status") != "installed":
-            raise RuntimeError(f"ZSK install failed: {install.stderr}")
-        if doctor.returncode != 0 or json.loads(doctor.stdout).get("status") != "healthy":
-            raise RuntimeError(f"ZSK doctor failed: {doctor.stderr}")
-
-
-def verify_obsidian_bridge() -> None:
-    sys.dont_write_bytecode = True
-    sys.path.insert(0, str(ZSK_PACKAGE / "Skills"))
-    from runtime.vault_reader import read_method_asset, read_primary_profile
-    from runtime.vault_search import search_knowledge_assets, search_method_assets
-    from shared.contracts import BINDING_SCHEMA, ROOT_KEYS, Binding
-    from shared.obsidian_adapter import ObsidianAdapter
-    from shared.stage5_intake import IntakeRequest, Stage5Intake
-    from shared.stage6_knowledge import KnowledgeRequest, Stage6Knowledge
-    from shared.stage7_method import MethodRequest, Stage7Method
-    from shared.stage8_profile import ProfileLayers, ProfileRequest, Stage8Profile
-
-    task_id = "01a01e29-a6ba-73a2-82e6-4ad1caa0f33b"
-    temporary_parent = Path("/private/tmp") if Path("/private/tmp").is_dir() else Path(tempfile.gettempdir()).resolve()
-    with tempfile.TemporaryDirectory(prefix="zsk-content-slim-", dir=temporary_parent) as directory:
-        binding = Binding(
-            BINDING_SCHEMA, "CLT-BRIDGE001", "中性主体", "中性知识库", "person",
-            "obsidian", directory, {key: f"root:{key}" for key in ROOT_KEYS},
-            "zsk-stage2-template-v1",
-        )
-        adapter = ObsidianAdapter()
-        if adapter.resolve_binding(binding).status != "ok" or adapter.create_skeleton(binding).status != "ok":
-            raise RuntimeError("ZSK Obsidian skeleton failed")
-        intake = Stage5Intake(adapter)
-
-        def source(name: str, text: str, role: str):
-            result = intake.execute(IntakeRequest(task_id, binding, name, text.encode(), name, source_role=role))
-            if result.record is None:
-                raise RuntimeError(f"ZSK intake failed for {role}")
-            return result.record
-
-        knowledge_source = source("knowledge.txt", "确认需求后再形成书面方案。", "business_knowledge")
-        method_source = source("method.txt", "先说顾虑，再给判断顺序。", "reference_method")
-        profile_source = source("profile.txt", "中性主体的确认资料。", "profile_material")
-        knowledge = Stage6Knowledge(adapter).execute(
-            KnowledgeRequest(task_id, binding, knowledge_source, "客户需求确认流程", "客户交付流程", "确认需求后，再形成书面方案。")
-        )
-        method = Stage7Method(adapter).execute(
-            MethodRequest(task_id, binding, method_source, "顾虑到判断的表达结构", "读者决策表达", "从读者顾虑切入", "先拆顾虑再给判断顺序", "用对比句说具体", "邀请读者自查", "把问题判断和行动连成短链")
-        )
-        profile = Stage8Profile(adapter).execute(
-            ProfileRequest(task_id, binding, profile_source, "中性主体", ProfileLayers(("主体已确认当前业务范围。",), ("当前按已确认流程运营。",), ("候选素材须人工确认。",)))
-        )
-        if (knowledge.status, method.status, profile.status) != ("registered", "registered", "registered"):
-            raise RuntimeError("ZSK 03/04/05 asset generation failed")
-        root = Path(directory)
-        knowledge_assets = search_knowledge_assets(root / "03-业务知识库", needs=["客户交付流程"])
-        method_assets = search_method_assets(root / "04-内容方法库", query="读者决策表达")
-        if len(knowledge_assets) != 1 or len(method_assets) != 1:
-            raise RuntimeError("Content Slim did not retrieve ZSK assets")
-        parsed = read_method_asset(root / "04-内容方法库", method_assets[0]["relative_path"])
-        if parsed.asset_id != method.asset.asset_id:
-            raise RuntimeError("ZSK method identity changed in Content Slim")
-        read_primary_profile(root / "05-IP-Profile", {"status": "active", "is_primary": True})
+    if result.returncode != 0:
+        output = (result.stdout + "\n" + result.stderr).strip()
+        raise RuntimeError(f"Content Slim tests failed:\n{output}")
 
 
 def verify_no_generated_files() -> None:
-    forbidden = [path for path in ROOT.rglob("*") if path.name == "__pycache__" or path.suffix in {".pyc", ".pyo"}]
+    forbidden = [
+        path
+        for path in ROOT.rglob("*")
+        if path.name == "__pycache__" or path.suffix in {".pyc", ".pyo"}
+    ]
     if forbidden:
         raise RuntimeError(f"generated Python files found: {forbidden}")
 
 
 def main() -> int:
-    verify_content()
-    verify_zsk()
+    version, file_count = verify_content()
     verify_examples_and_cli()
-    verify_zsk_delivery()
-    verify_obsidian_bridge()
+    verify_tests()
     verify_no_generated_files()
-    print("PASS: Content Slim 5/34 + ZSK 5/28 + Obsidian bridge verified.")
+    print(
+        f"PASS: standalone Content Slim {version}, "
+        f"5 skills / {file_count} runtime files verified."
+    )
     return 0
 
 

@@ -1,120 +1,180 @@
-# ZSK + Content Slim
+# Content Slim
 
-一个仓库，两套边界清楚、可以连续配合的通用能力：
+Content Slim 是一套短视频口播内容工作流。
 
-- **ZSK Knowledge Base**：创建知识库、登记来源，把资料整理成业务知识、内容方法和个人 Profile；
-- **Content Slim**：只读已经绑定的知识资产，结合 1—5 篇参考生成口播，并保留三次真人确认。
+它只做一件事：读取已经配置好的本地内容资料和 1—5 篇参考，依次完成方向、正文、配套文案三次真人确认，最终只保存两份 Markdown，并保持未发布。
 
-仓库不包含任何客户知识库、个人 Profile、历史任务、成稿、账号、凭据或密钥。
+## 仓库边界
 
-## 它们怎么配合
+本仓库只包含 5 个 Content Slim Skill：
 
-```text
-原始资料
-   ↓
-zsk-router
-   ↓
-01 来源索引 / 02 待审核
-   ├── zsk-zhishi  → 03 业务知识库
-   ├── zsk-duibiao → 04 内容方法库
-   └── zsk-profile → 05 IP Profile
-                         ↓
-                 Registry + Manifest
-                         ↓
-                    content-slim
-                         ↓
-          方向确认 → 正文确认 → 配套确认并保存
-                         ↓
-                  07 生产与反馈
-```
+- **content-slim**：唯一公开入口，管理同一个 Run、版本和三次真人确认；
+- **content-analyzer**：拆解参考并生成方向；
+- **content-context-retriever**：按已确认方向装配唯一 Context Pack；
+- **content-writer**：生成或修改纯口播正文；
+- **content-publish-pack**：正文确认后生成标题、发布正文和标签。
 
-ZSK 负责“把资料变成可用资产”，Content Slim 负责“消费这些资产生成口播”。两者不会互相越权：ZSK 不写口播，Content Slim 不建设知识库。
+本仓库不负责资料采集、资料分类、外部系统写入、数字人、视频剪辑、上传或发布。
 
-## 当前版本和状态
+## 与 ZSK 的关系
 
-| 模块 | 版本 | 内容 | 状态 |
-|---|---|---|---|
-| Content Slim | `0.11.0-rc.4` | 5 个 Skill，34 个运行文件 | 已通过公开包校验与三次真人 Gate 链路 |
-| ZSK Knowledge Base | `0.2.2-stage11-preview` | 5 个 Skill，1 个 shared 运行目录，28 个运行文件 | 预览版；技术矩阵通过，独立新用户首次使用和真人质量验收仍待完成 |
+Content Slim 不包含知识库 Router，也不把 ZSK 作为代码依赖。两者是可选的前后两个独立仓库：
 
-ZSK 预览版当前支持：
+- [zsk-knowledge-base-skill](https://github.com/slbb1995/zsk-knowledge-base-skill) 负责建库、入库和生成 03/04/05；
+- Content Slim 只消费已经明确绑定的本地内容资产并生产口播；
+- 客户连续使用时推荐先安装 ZSK，再安装 Content Slim；
+- ZSK 的代码和更新只在独立 ZSK 仓库维护，不复制回本仓库；
+- Content Slim 当前只直接读取本地文件系统，因此自动桥接只适用于 ZSK 的 Obsidian 本地知识库，不适用于飞书知识库。
 
-- Obsidian 本地知识库；
-- 飞书知识库（需要 `lark-cli`、用户身份和相应权限）；
-- MD、TXT、严格 CSV 的确定性来源登记；
-- 01—07、AGENTS、README 的首次建库；
-- 01/02 来源与异常、03 知识卡、04 方法卡、05 三层主 Profile。
+两个仓库安装完成不等于已经自动绑定。首次缺少配置时，Content Slim 会先只读预检用户明确给出的知识库绝对路径；用户确认同一路径后才 create-only 保存 Registry、Manifest 和 runs，后续任务再自动复用。
 
-Content Slim 当前只直接读取本地文件系统，所以“ZSK → Content Slim”自动衔接目前针对 **Obsidian 本地知识库**。飞书可以使用 ZSK 建库和入库，但 Content Slim 暂不能直接读取飞书文档。
+## 工作流程
+
+~~~text
+用户选题 + 1—5 篇本地参考
+              ↓
+       匹配已配置内容资料
+              ↓
+        方向确认 Gate A
+              ↓
+          生成口播正文
+              ↓
+          正文真人确认
+              ↓
+       生成标题和配套文案
+              ↓
+        配套确认并保存
+              ↓
+      两份 Markdown，未发布
+~~~
+
+三个真人停点不能合并或跳过：
+
+1. 方向：认可整版方向 / 需要修改 / 不采用
+2. 正文：确认正文 / 需要修改
+3. 配套：确认并保存 / 需要修改
+
+“随便”“差不多”等模糊说法不算确认。
+
+## 当前版本
+
+| 版本 | Skill 数量 | 运行文件 | 状态 |
+|---|---:|---:|---|
+| 0.11.0-rc.5 | 5 | 36 | 独立 Content Slim 发布包，含一次持久绑定入口 |
 
 ## 仓库结构
 
-```text
-Skills/                                  # Content Slim 的 5 个 Skill
-Packages/zsk-knowledge-base/
-├── Skills/                              # ZSK 的 5 个 Skill + shared 运行目录
-├── tools/zsk_delivery.py                # 安装、诊断、升级和回退
-└── zsk-manifest.json                    # ZSK 文件清单和哈希
-examples/                                # 两种知识库配置示例
-tools/verify.py                          # 整仓验证和跨模块真实临时 Vault 测试
-```
+~~~text
+Skills/
+├── content-slim/
+├── content-analyzer/
+├── content-context-retriever/
+├── content-writer/
+└── content-publish-pack/
 
-## 最省事的使用方法
+examples/
+├── client-registry.example.json
+└── content-client-manifest.example.json
+
+tests/
+install.py
+tools/verify.py
+tools/verify_zsk_bridge.py
+release-manifest.json
+SHA256SUMS
+VERSION
+LICENSE
+~~~
+
+## 安装
 
 先克隆并验证：
 
-```bash
+~~~bash
 git clone https://github.com/slbb1995/content-slim.git
 cd content-slim
 python3 tools/verify.py
-```
+python3 install.py
+~~~
 
-然后把下面整段话交给 Codex 或 WorkBuddy。不要只复制单个 `SKILL.md`：
+验证未通过就停止，不要继续安装。安装器只安装 5 个 Content Slim Skill，发现同名目录、软链接、额外文件或哈希不一致时停止，不覆盖。
 
-```text
-请完整读取当前 zsk + content-slim 仓库的 README.md，帮我安装并绑定这套知识库口播工作台。
+然后把下面整段交给 Codex 或 WorkBuddy：
 
-1. 先运行 python3 tools/verify.py；验证未通过立即停止。
-2. 检查当前 AI 宿主的 Skill 根目录。Codex 通常是 ~/.codex，WorkBuddy 必须读取它自己的真实本地 Skill 位置，不得猜测。
-3. 使用 Packages/zsk-knowledge-base/tools/zsk_delivery.py 安装 ZSK 包；如果已存在同名未托管目录或版本不同，停止并报告，不要覆盖。
-4. 将仓库根 Skills 下的 5 个 Content Slim Skill create-only 安装到当前宿主的 skills 目录；发现同名 Skill 时停止并报告差异。
-5. 安装后执行 ZSK doctor，并回读 5 个 ZSK Skill、shared 目录、5 个 Content Slim Skill。
-6. 询问我已有 ZSK/Obsidian 知识库的本地绝对路径；没有得到路径前不得搜索、猜测或改用其他 Vault。
-7. 核对知识库中真实存在 03-业务知识库、04-内容方法库、05-IP-Profile、06-Agent与Workflow、07-生产与反馈。
-8. 参考 examples/zsk-content-client-manifest.example.json，在 06-Agent与Workflow 中 create-only 创建 content-v2-client-manifest.json。
-9. 参考 examples/zsk-content-client-registry.example.json 保存唯一知识库绑定。Codex 使用 ~/.codex/.content-v2-slim/client-registry.json 和 ~/.codex/.content-v2-slim/runs；WorkBuddy 必须使用它自己的持久本地配置位置，并把 Registry 与运行目录的精确位置写入该知识库的 06 使用说明，不得照抄 Codex 路径。
-10. 回读 Registry、Manifest 和四个授权目录；不得因为目录名相似就声明绑定成功。
-11. 安装与绑定阶段不读取业务正文、不入库、不生成口播、不保存成稿、不发布。
-```
+~~~text
+请完整读取当前 content-slim 仓库的 README.md，只安装 Content Slim。
 
-如果还没有知识库，安装后调用 `$zsk-router`，说“帮我创建一个知识库”。它会询问飞书或 Obsidian、知识库名称和必要位置，并在真正创建前展示目标让你确认。
+1. 先运行 python3 tools/verify.py；验证失败立即停止。
+2. 检查当前 AI 宿主真实的 Skills 根目录，不要猜路径。
+3. 使用 python3 install.py 安装 5 个 Content Slim Skill；
+   其他宿主使用 --dest 指定真实 Skills 目录。
+4. 同名目录、软链接、额外文件或哈希不一致时停止，不覆盖。
+5. 安装后回读 5 个 SKILL.md、content-slim 的 runtime、schemas 和脚本。
+6. 不从本仓库安装 zsk-router，不读取业务正文，不生成口播，不保存成稿，
+   不上传，不发布。
+7. 最后告诉我是否需要重新打开任务。
+~~~
 
-## 日常只记两个入口
+不要只复制一个 SKILL.md。完整运行需要 5 个 Skill，以及 content-slim 目录内的 Runtime、Schema 和脚本。
 
-### 1. 建库或把资料放进知识库
+## 首次配置
 
-```text
-请使用 $zsk-router 把下面资料入库：
+Content Slim 只读取用户明确指定的本地内容工作目录，不搜索整台电脑，也不猜测其他目录。
 
-资料路径：
-资料用途：业务知识 / 内容参考方法 / 个人 Profile（不确定可以留空）
+它需要两份配置：
 
-先核对来源、权限、隐私、版本和归属。不确定时停在 02，不要猜测；入库完成后停止，不写口播。
-```
+1. **Client Manifest**：声明业务资料、内容方法、Profile 和输出目录；
+2. **Client Registry**：把 client_id 绑定到一个本地工作目录和对应 Manifest。
 
-后台职责：
+通用示例：
 
-- `zsk-ruku`：登记01来源，异常只进02；
-- `zsk-zhishi`：把已登记业务来源整理进03；
-- `zsk-duibiao`：把参考资料提炼成04表达方法，不搬运身份、案例和承诺；
-- `zsk-profile`：把本人资料整理成05唯一主 Profile。
+- examples/content-client-manifest.example.json
+- examples/client-registry.example.json
 
-普通用户只调用 `$zsk-router`，不手工选择四个后台 Skill。
+推荐配置步骤：
 
-### 2. 使用知识库写一条口播
+1. 准备一个明确的本地内容工作目录；
+2. 在目录中准备 Manifest 授权的四个子目录；
+3. 根据示例创建 content-client-manifest.json；
+4. 在当前 AI 宿主的持久配置位置创建 client-registry.json；
+5. Registry 与 Manifest 的 client_id 必须完全一致；
+6. 回读 Registry、Manifest 和四个授权目录后，才能开始第一条 Run。
 
-```text
-请使用 $content-slim，在安装时绑定好的唯一 ZSK/Obsidian 知识库中开始一条全新口播任务。
+Codex 通常使用：
+
+~~~text
+~/.codex/.content-v2-slim/client-registry.json
+~/.codex/.content-v2-slim/runs
+~~~
+
+其他宿主必须使用自己的真实持久位置，不能照抄 Codex 路径。路径缺失、冲突、越界、含软链接或无法回读时立即停止。
+
+### 已先使用 ZSK 的客户
+
+当用户要绑定 ZSK 创建的 Obsidian 本地知识库时，使用已安装的 content-slim/scripts/configure_client.py：
+
+1. 传入 Registry、runs、Vault 绝对路径和讲述者模式，但先不传 confirm-vault-root；
+2. 程序只检查 03—07 目录和 04/05 frontmatter，返回规范路径与动作预览，零写入；
+3. 完整展示预览后停下，不得代用户确认；
+4. 只有用户下一条消息明确确认同一路径后，才把预览中的规范绝对路径原样传给 confirm-vault-root；
+5. 程序 create-only 写入并回读。完全一致则复用，任何冲突都停止，不覆盖、不改绑；
+6. personal_ip 模式必须存在唯一 status active、is_primary true 的主 Profile。
+
+两个准备交付的仓库还必须通过独立桥接验收：
+
+~~~bash
+python3 tools/verify_zsk_bridge.py \
+  --zsk-root ../zsk-knowledge-base-skill
+~~~
+
+该验收会把 Content Slim 安装到全新临时 Skills 目录，让 ZSK 在全新 Obsidian Vault 真实写出 03/04/05，再检查 Content Slim 能读取三类资产、预检零写入、确认后复用绑定并创建新 Run；验收过程不得保存成稿或产生 07 输出。
+
+## 日常使用
+
+只调用公开入口 content-slim：
+
+~~~text
+请使用 $content-slim，在已经配置好的本地内容工作目录中开始一条全新口播任务。
 
 选题：
 参考资料的本地绝对路径（1—5 篇 MD 或 TXT）：
@@ -127,30 +187,26 @@ python3 tools/verify.py
 2. 完整展示正文后停下；
 3. 完整展示标题和配套文案后停下。
 
-只有我明确确认后才能进入下一步。最终确认后只保存两份 Markdown 到 07，保持未发布。
-```
+只有我明确确认后才能进入下一步。
+最终确认后只保存两份 Markdown，保持未发布。
+~~~
 
-三个真人选择分别是：
+## neutral 模式
 
-- 方向：`认可整版方向 / 需要修改 / 不采用`
-- 正文：`确认正文 / 需要修改`
-- 配套：`确认并保存 / 需要修改`
+没有个人 Profile 时可以使用 neutral 模式，只根据本次参考和授权目录生成内容。
 
-“随便”“差不多”等模糊说法不算确认。
+neutral 模式仍然需要真实 Registry、Manifest、四个授权目录和 1—5 篇本地参考；它不是无配置运行模式。
 
-## 没有知识资产也能先写
+## 更新与安全边界
 
-Content Slim 可以在 `neutral` 模式下只使用本次提供的 1—5 篇参考生成口播。03、04可以暂时为空，05不需要 Profile。但它仍要求 Registry、Manifest 和授权目录真实存在。
-
-## 更新和安全边界
-
-- 更新前先拉取仓库并重新运行 `python3 tools/verify.py`；
-- ZSK 使用自己的交付工具 upgrade/doctor/rollback；
-- Content Slim 同名目录不得直接覆盖，先比较、备份、再升级并回读；
+- 更新前重新运行 python3 tools/verify.py；
+- 同名 Skill 目录不得静默覆盖；
+- Registry、Manifest、参考来源或当前 Run 不可信时立即停止；
+- 不自动搜索知识库，不把飞书链接当成本地 Vault，不在不同客户之间静默改绑；
 - 参考内容只提炼可迁移机制，不冒充自己的身份、案例、数据或承诺；
-- 隐私、权限、归属、版本或客户绑定无法确认时停止；
+- 方向、正文、配套三个真人确认不能由程序或 Agent 代替；
 - 保存不等于发布，本仓库没有自动发布能力。
 
 ## 许可证
 
-本仓库中的 ZSK 与 Content Slim 均使用 [MIT License](LICENSE)。
+Content Slim 使用 [MIT License](LICENSE)。

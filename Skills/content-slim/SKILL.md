@@ -24,7 +24,7 @@ description: Content V2 Slim 的唯一用户入口。用于开始、继续、恢
 - 建设客户知识、内容方法或个人资料资产；
 - 直接拆解对标、判断资料语义、写正文或生成配套文案；
 - 构建、安装、发布、Git 操作或 Host 修复；
-- 自己读取 03/05、写 Context Pack、正文、配套或客户保存。
+- 在内容生产阶段绕过 P3 自己读取 03/05、写 Context Pack、正文、配套或客户保存；首次绑定只允许确定性脚本检查授权目录和 04/05 frontmatter。
 
 ## 输入
 
@@ -41,6 +41,19 @@ description: Content V2 Slim 的唯一用户入口。用于开始、继续、恢
 ```
 
 `client_id` 和 `speaker_mode` 从当前配置解析。当前 Codex Host 没有向入口提供可验证且跨 `start / respond-direction / status` 稳定的身份，因此普通 CLI 不接收 `host_request_id` 或原始 `task_key`。确定性程序根据冻结的客户、讲述模式、用户原始选题和参考来源集合生成 task-record；后续内部操作只接受已经落盘并通过完整性校验的相对句柄。不得让用户填写或让 AI 临时编造；不得改传绝对路径，必须原样复用入口返回的 task-record。
+
+## 首次绑定与配置解析
+
+开始 Run 前必须先解析一份持久绑定。Codex 默认使用 ~/.codex/.content-v2-slim/client-registry.json 和 ~/.codex/.content-v2-slim/runs；其他宿主必须使用自己的真实持久位置，不能照抄 Codex 路径。
+
+- 已有 Registry、Manifest 和 runs 且回读一致时直接复用，不重复询问；
+- 缺少绑定时，不调用 start，不扫描或猜测本地目录；
+- 普通本地工作目录按仓库示例配置 Registry 与 Manifest；
+- 当用户明确要消费先安装的 ZSK / Obsidian 知识库时，询问知识库绝对路径和讲述者模式，使用 scripts/configure_client.py 先做只读预检并完整展示路径；预检轮次必须停下，零写入；
+- 收到用户对同一路径的下一条明确确认后，才传入 confirm-vault-root；程序 create-only 写 Registry、Manifest 和 runs，写后回读成功才能说绑定完成；
+- 路径、client_id、Manifest、04 方法卡或 05 主 Profile 冲突时停止，不覆盖、不改绑、不降低读取合同；
+- personal_ip 必须存在唯一 status active、is_primary true 的主 Profile；neutral 和 company_brand 不得借此读取或冒充个人 Profile；
+- 当前只绑定本地文件系统。飞书链接不能当作 Vault 路径。
 
 ## 输出
 
@@ -134,6 +147,7 @@ Gate A 只接受：`认可整版方向 / 需要修改 / 不采用`。正文确�
 - `runtime/schema_validation.py`：Analyzer、Gate A、唯一 Context Pack、正文与配套输出边界；
 - `runtime/vault_save.py`：Manifest 授权输出根下的双文件 create-only 保存与回读；
 - `runtime/error_model.py`：用户响应与技术记录分离；
+- `runtime/binding_setup.py`、`scripts/configure_client.py`：ZSK / Obsidian 首次只读预检、确认后 create-only 持久绑定与复用；
 - `schemas/`：Registry 与 Manifest 字段合同。
 
 设计原因保存在 Factory 设计卡；实现细节读 `runtime/`；字段约束读 `schemas/`。不要把这些内容复制回本文件。

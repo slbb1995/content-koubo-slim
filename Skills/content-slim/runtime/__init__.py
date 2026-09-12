@@ -1,5 +1,12 @@
 """Deterministic runtime primitives for Content V2 Slim."""
 
+from .binding_setup import (
+    BindingPlan,
+    BindingSetupError,
+    configure_zsk_binding,
+    default_client_id,
+    plan_zsk_binding,
+)
 from .client_manifest import (
     SUPPORTED_SPEAKER_MODES,
     ClientManifest,
@@ -26,6 +33,8 @@ from .vault_reader import read_method_asset, read_primary_profile
 from .vault_search import search_knowledge_assets, search_method_assets
 
 __all__ = [
+    "BindingPlan",
+    "BindingSetupError",
     "SUPPORTED_SPEAKER_MODES",
     "ClientLocation",
     "ClientManifest",
@@ -33,9 +42,12 @@ __all__ = [
     "SlimRuntimeError",
     "SlimStateMachine",
     "build_migration_candidate",
+    "configure_zsk_binding",
+    "default_client_id",
     "load_manifest",
     "load_registry",
     "preflight_references",
+    "plan_zsk_binding",
     "read_method_asset",
     "read_primary_profile",
     "resolve_asset_root",

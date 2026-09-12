@@ -1,0 +1,120 @@
+#!/usr/bin/env python3
+"""Regenerate Content Slim runtime hashes from the five Skill directories."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+import subprocess
+
+
+ROOT = Path(__file__).resolve().parents[1]
+CONTENT_SKILLS = (
+    "content-analyzer",
+    "content-context-retriever",
+    "content-publish-pack",
+    "content-slim",
+    "content-writer",
+)
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def runtime_files() -> list[dict[str, object]]:
+    files: list[dict[str, object]] = []
+    for skill in CONTENT_SKILLS:
+        root = ROOT / "Skills" / skill
+        for path in sorted(root.rglob("*")):
+            if (
+                not path.is_file()
+                or path.is_symlink()
+                or path.name == "__pycache__"
+                or path.suffix in {".pyc", ".pyo"}
+            ):
+                continue
+            files.append(
+                {
+                    "bytes": path.stat().st_size,
+                    "mode": "0644",
+                    "path": path.relative_to(ROOT).as_posix(),
+                    "sha256": sha256(path),
+                    "skill": skill,
+                }
+            )
+    return sorted(files, key=lambda item: str(item["path"]))
+
+
+def runtime_tree_sha256(files: list[dict[str, object]]) -> str:
+    digest = hashlib.sha256()
+    for item in files:
+        digest.update(
+            f"{item['path']}\0{item['sha256']}\n".encode("utf-8")
+        )
+    return digest.hexdigest()
+
+
+def base_commit() -> str:
+    completed = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    value = completed.stdout.strip()
+    return value if completed.returncode == 0 and value else "unknown"
+
+
+def main() -> int:
+    version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    files = runtime_files()
+    tree = runtime_tree_sha256(files)
+    manifest = {
+        "integrity": {
+            "hash_algorithm": "sha256",
+            "normalized_mtime_epoch": 1787587782,
+        },
+        "package": {
+            "id": "content-v2-slim",
+            "version": version,
+        },
+        "runtime": {
+            "file_count": len(files),
+            "files": files,
+            "legacy_v1_runtime_dependency_count": 0,
+            "skill_count": len(CONTENT_SKILLS),
+            "skills": list(CONTENT_SKILLS),
+            "tree_sha256": tree,
+        },
+        "schema_version": "content-v2-slim-release-v1",
+        "source": {
+            "base_commit": base_commit(),
+            "selection_path": "Skills/",
+            "tree_sha256": tree,
+        },
+    }
+    (ROOT / "release-manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True)
+        + "\n",
+        encoding="utf-8",
+    )
+    sums = "".join(
+        f"{item['sha256']}  {item['path']}\n" for item in files
+    )
+    (ROOT / "SHA256SUMS").write_text(sums, encoding="utf-8")
+    print(
+        f"Updated release manifest: {version}, "
+        f"{len(files)} runtime files, tree {tree}"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
