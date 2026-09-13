@@ -39,7 +39,7 @@ def stable_id(prefix: str, *values: str) -> str:
 
 
 def default_common_registry_path() -> Path:
-    configured = os.environ.get("CODEX_HOME")
+    configured = os.environ.get("CONTENT_KOUBO_HOME") or os.environ.get("CODEX_HOME")
     root = Path(configured).expanduser() if configured else Path.home() / ".codex"
     return root / ".content-workflows" / "knowledge-base-registry.json"
 
@@ -285,9 +285,17 @@ def _scan_profiles(vault: Path, client_id: str) -> list[dict[str, Any]]:
         if path.is_symlink() or not path.is_file():
             raise SlimRuntimeError("SLIM_PROFILE_INVALID", "content_source", detail="Profile path is unsafe")
         raw = path.read_bytes()
-        metadata, body = _frontmatter(raw.decode("utf-8"))
+        text = raw.decode("utf-8")
+        # These are the compatible layout's control/index documents, not people.
+        # Do not catch parse errors for arbitrary pages: a damaged Profile must stop.
+        support_document = path.name in {"AGENTS.md", "README.md", "00-IP-Profile索引.md"}
+        if support_document and not text.replace("\r\n", "\n").startswith("---\n"):
+            continue
+        metadata, body = _frontmatter(text)
+        if support_document and not (metadata.get("profile_id") or metadata.get("type") == "ip_profile" or metadata.get("profile_schema")):
+            continue
         title = re.search(r"(?m)^#\s+(.+?)\s*$", body)
-        display = metadata.get("display_name") or (title.group(1).removesuffix(" Profile").strip() if title else path.stem)
+        display = metadata.get("display_name") or metadata.get("subject_name") or (title.group(1).removesuffix(" Profile").strip() if title else path.stem)
         profile_id = metadata.get("profile_id") or stable_id("PRF", client_id, str(display).casefold())
         aliases = metadata.get("aliases", [])
         if not isinstance(aliases, list):

@@ -27,9 +27,9 @@ TRANSITIONS = {
     "context_pending": {"context_pending", "context_ready", "blocked"},
     "context_ready": {"draft_pending", "blocked"},
     "draft_pending": {"draft_pending", "draft_approved", "blocked"},
-    "draft_approved": {"package_pending", "blocked"},
-    "package_pending": {"package_pending", "package_approved", "blocked"},
-    "package_approved": {"saved", "blocked"},
+    "draft_approved": {"package_pending", "blocked", "draft_pending"},
+    "package_pending": {"package_pending", "package_approved", "blocked", "draft_pending"},
+    "package_approved": {"saved", "blocked", "draft_pending"},
     "blocked": {
         "started",
         "direction_pending",
@@ -41,7 +41,7 @@ TRANSITIONS = {
         "package_pending",
         "package_approved",
     },
-    "saved": set(),
+    "saved": {"draft_pending"},
     "abandoned": set(),
 }
 

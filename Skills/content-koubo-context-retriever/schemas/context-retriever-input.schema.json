@@ -12,6 +12,7 @@
   ],
   "properties": {
     "context_version": {"const": "slim-1.0"},
+    "source_mode": {"enum": ["external", "library"]},
     "client_id": {"type": "string", "minLength": 1},
     "speaker_mode": {"enum": ["personal_ip", "company_brand", "neutral"]},
     "task_input": {

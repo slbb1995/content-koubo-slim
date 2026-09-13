@@ -72,8 +72,11 @@ class ContentSourceV1Tests(unittest.TestCase):
             client_id = "CLT-1234567890ABCD"
             primary_id = self.write_profile(vault, client_id, "甲", primary=True)
             other_id = self.write_profile(vault, client_id, "乙", primary=False)
+            for name in ("AGENTS.md", "README.md", "00-IP-Profile索引.md"):
+                (vault / "05-IP-Profile" / name).write_text("# 说明\n这不是人物资料。", encoding="utf-8")
             registry = root / "host" / ".content-workflows" / "knowledge-base-registry.json"
             plan = plan_obsidian_configuration(vault, registry_path=registry, client_id=client_id)
+            self.assertEqual(plan['preview']['profile_count'], 2)
             self.assertFalse(registry.exists())
             self.assertFalse((vault / "06-Agent与Workflow" / "content-source-manifest.json").exists())
             applied = apply_obsidian_configuration(

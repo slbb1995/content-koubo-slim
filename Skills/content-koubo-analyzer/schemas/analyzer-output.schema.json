@@ -21,7 +21,7 @@
     "analysis_version": {"const": "slim-1.0"},
     "reference_analyses": {
       "type": "array",
-      "minItems": 1,
+      "minItems": 0,
       "maxItems": 5,
       "items": {
         "type": "object",

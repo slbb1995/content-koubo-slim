@@ -39,7 +39,7 @@ class ClientLocation:
 
 def default_config_root() -> Path:
     """Return the current Codex host's persistent Content 口播 Slim config root."""
-    configured = os.environ.get("CODEX_HOME")
+    configured = os.environ.get("CONTENT_KOUBO_HOME") or os.environ.get("CODEX_HOME")
     host_root = Path(configured).expanduser() if configured else Path.home() / ".codex"
     return host_root / ".content-koubo-slim"
 

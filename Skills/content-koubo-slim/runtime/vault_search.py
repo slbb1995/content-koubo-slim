@@ -17,6 +17,104 @@ from .vault_reader import (
 
 
 ROLE_LIMITS = {"peer_content_asset": 3, "oral_method_asset": 2}
+MAX_MATERIAL_CHARACTERS = 12000
+
+
+def method_kind(asset: MethodAsset) -> str:
+    explicit = asset.metadata.get("method_kind") or asset.metadata.get("structure_layer")
+    if explicit:
+        return str(explicit)
+    if asset.metadata.get("type") in {"oral_method", "oral_structure_index"}:
+        return "selection_guide"
+    if asset.asset_id.startswith("ORAL-ENH-"):
+        return "enhancement"
+    return "peer_deconstruction" if asset.asset_role == "peer_content_asset" else "structure"
+
+
+def method_is_usable(asset: MethodAsset, audience_scope: str | None, allow_experimental: bool) -> bool:
+    if audience_scope is not None and asset.audience_scope not in {audience_scope, "both"}:
+        return False
+    if not allow_experimental and asset.metadata.get("maturity") == "experimental_reference":
+        return False
+    if asset.metadata.get("usage_scope") in {"do_not_use", "counterexample_only", "blocked"}:
+        return False
+    return True
+
+
+def complete_method_text(asset: MethodAsset) -> str:
+    """Never silently chop off the reasoning, adaptation or forbidden-transfer sections."""
+    if len(asset.body) > MAX_MATERIAL_CHARACTERS:
+        raise SlimRuntimeError("SLIM_METHOD_ASSET_INVALID", "vault_search", detail="selected material exceeds 12000 characters; prepare a source-linked bounded asset")
+    return asset.body
+
+
+def method_source_metadata(asset: MethodAsset) -> dict[str, Any]:
+    return {key: asset.metadata[key] for key in (
+        "type", "status", "audience_scope", "method_kind", "structure_layer", "maturity",
+        "usage_scope", "source_verification", "claim_scope", "applicable_workflows",
+        "source_id", "source_section") if key in asset.metadata}
+
+
+def discover_method_assets(method_root: str | Path, *, offset: int = 0, limit: int = 40,
+                           audience_scope: str | None = None, allow_experimental: bool = False) -> dict[str, Any]:
+    """Page metadata for Agent semantic selection; does not create a Run or choose a structure."""
+    if offset < 0 or not 1 <= limit <= 50:
+        raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "vault_search", detail="invalid discovery page")
+    root = safe_method_root(method_root)
+    items, excluded, ids = [], [], set()
+    for path in sorted(root.rglob("*.md")):
+        relative = path.relative_to(root).as_posix()
+        try:
+            asset = read_method_asset(root, relative, include_guidance=True)
+        except SlimRuntimeError as exc:
+            if "symlink" in exc.detail.casefold():
+                raise
+            excluded.append({"relative_path": relative, "reason": exc.detail})
+            continue
+        if asset.asset_id in ids:
+            raise SlimRuntimeError("SLIM_METHOD_ASSET_INVALID", "vault_search", detail="duplicate asset id")
+        ids.add(asset.asset_id)
+        if not method_is_usable(asset, audience_scope, allow_experimental):
+            excluded.append({"relative_path": relative, "reason": "audience, usage or experimental scope does not permit this task"})
+            continue
+        items.append({"asset_id": asset.asset_id, "relative_path": relative, "page_sha256": asset.page_sha256,
+                      "asset_role": asset.asset_role, "title": asset.title, "method_kind": method_kind(asset),
+                      "audience_scope": asset.audience_scope, "keywords": list(asset.keywords),
+                      "use_when": list(asset.use_when), "content_purposes": asset.metadata.get("content_purposes", []),
+                      "maturity": asset.metadata.get("maturity"), "usage_scope": asset.metadata.get("usage_scope"),
+                      "source_verification": asset.metadata.get("source_verification")})
+    return {"items": items[offset:offset+limit], "total": len(items),
+            "next_offset": offset+limit if offset+limit < len(items) else None,
+            "excluded": excluded[offset:offset+limit], "excluded_total": len(excluded), "wrote": False}
+
+
+def select_method_assets(method_root: str | Path, selections: list[dict[str, Any]], *,
+                         audience_scope: str | None = None, allow_experimental: bool = False) -> list[dict[str, Any]]:
+    """Validate the Agent's semantic choice against real paths, bytes, roles and budget."""
+    if not isinstance(selections, list) or len(selections) > 5:
+        raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "vault_search", detail="select at most five 04 materials")
+    counts = {role: 0 for role in ROLE_LIMITS}
+    result, ids = [], set()
+    for item in selections:
+        if not isinstance(item, dict) or set(item) != {"relative_path", "page_sha256", "reason"} or not isinstance(item["reason"], str) or not item["reason"].strip():
+            raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "vault_search", detail="semantic selection requires path, snapshot hash and reason")
+        if not isinstance(item["page_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", item["page_sha256"]):
+            raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "vault_search", detail="semantic selection requires valid snapshot hash")
+        asset = read_method_asset(method_root, item["relative_path"], expected_sha256=item["page_sha256"])
+        if asset.asset_id in ids or not method_is_usable(asset, audience_scope, allow_experimental):
+            raise SlimRuntimeError("SLIM_METHOD_ASSET_INVALID", "vault_search", detail="duplicate or out-of-scope selected material")
+        ids.add(asset.asset_id)
+        counts[asset.asset_role] += 1
+        if counts[asset.asset_role] > ROLE_LIMITS[asset.asset_role]:
+            raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "vault_search", detail="selected material role budget exceeded")
+        result.append({"asset_id": asset.asset_id, "asset_role": asset.asset_role,
+                       "source_metadata": method_source_metadata(asset),
+                       "relative_path": asset.relative_path, "page_sha256": asset.page_sha256,
+                       "audience_scope": asset.audience_scope, "excerpt": complete_method_text(asset),
+                       "relevance_evidence": ["语义选择："+item["reason"], "资料用途："+method_kind(asset),
+                           "使用范围："+str(asset.metadata.get("usage_scope", "method_reference_only")),
+                           "来源核验："+str(asset.metadata.get("source_verification", "not_declared"))]})
+    return result
 STOP_TERMS = {
     "一个", "这个", "怎样", "怎么", "什么", "是否", "到底", "可以", "内容", "口播",
     "边界", "资料", "当前", "可核验", "公开使用", "表达边界", "产品或", "具体",
@@ -102,6 +200,8 @@ def search_method_assets(
     method_root: str | Path,
     *,
     query: str,
+    audience_scope: str | None = None,
+    allow_experimental: bool = False,
 ) -> list[dict[str, Any]]:
     if not isinstance(query, str) or not query.strip():
         raise SlimRuntimeError(
@@ -131,6 +231,8 @@ def search_method_assets(
                 workflow_stage="正在拆解并匹配客户内容方向",
             )
         seen_ids.add(asset.asset_id)
+        if not method_is_usable(asset, audience_scope, allow_experimental):
+            continue
         score, evidence = _score(asset, query)
         if score < 6:
             continue
@@ -145,11 +247,14 @@ def search_method_assets(
                 {
                     "asset_id": asset.asset_id,
                     "asset_role": role,
+                    "source_metadata": method_source_metadata(asset),
                     "relative_path": asset.relative_path,
                     "page_sha256": asset.page_sha256,
                     "audience_scope": asset.audience_scope,
-                    "excerpt": _excerpt(asset, terms),
-                    "relevance_evidence": evidence,
+                    "excerpt": complete_method_text(asset),
+                    "relevance_evidence": [*evidence, "资料用途："+method_kind(asset),
+                        "使用范围："+str(asset.metadata.get("usage_scope", "method_reference_only")),
+                        "来源核验："+str(asset.metadata.get("source_verification", "not_declared"))],
                 }
             )
     return output

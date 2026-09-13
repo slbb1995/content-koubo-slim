@@ -3,6 +3,20 @@
 
 from __future__ import annotations
 
+import os
+import sys
+sys.dont_write_bytecode = True
+
+# WorkBuddy may inject sitecustomize/file hooks through PYTHONPATH. Re-exec
+# before importing the filesystem runtime; stdlib-only runtime needs no site.
+if __name__ == "__main__" and not (sys.flags.isolated and sys.flags.no_site and sys.flags.utf8_mode):
+    command = [sys.executable, "-I", "-S", "-X", "utf8", "-B", __file__, *sys.argv[1:]]
+    if os.name == "nt":
+        # Windows execv does not relay the replacement process's exit status.
+        import subprocess
+        raise SystemExit(subprocess.call(command))
+    os.execv(sys.executable, command)
+
 import argparse
 import json
 import re
@@ -50,13 +64,16 @@ from runtime.schema_validation import (
 )
 from runtime.state_machine import SlimStateMachine
 from runtime.vault_save import save_markdown_pair
+from runtime.batch_tasks import start_request, batch_status, validate_single_request, batch_item_digest, save_suffix
 from runtime.vault_reader import (
     read_knowledge_asset,
     read_method_asset,
     read_primary_profile,
     read_selected_profile,
 )
-from runtime.vault_search import search_knowledge_assets, search_method_assets
+from runtime.vault_search import (search_knowledge_assets, search_method_assets,
+    discover_method_assets, select_method_assets, complete_method_text, method_kind, method_is_usable,
+    method_source_metadata)
 
 
 DRAFT_CHOICES = ("确认正文", "需要修改")
@@ -69,11 +86,11 @@ CURRENT_STATE_ACTIONS = {
     "context_pending": "生成唯一 Content Context Pack；不要重新检索或改写方向。",
     "context_ready": "生成完整口播正文；不要重新检索客户资料。",
     "draft_pending": "请选择确认正文，或给出具体修改意见。",
-    "draft_approved": "生成标题、发布正文和标签；不要修改已确认正文。",
+    "draft_approved": "可生成配套；如需调整正文，先提交具体修改意见。",
     "package_pending": "请选择确认并保存，或给出具体修改意见。",
     "package_approved": "保存已确认正文和配套；不要重新生成内容。",
     "blocked": "先处理当前阻断问题，再复用同一个 Run 继续。",
-    "saved": "本次任务无需继续。",
+    "saved": "已保存；如需调整正文，可给出修改意见生成新版本，原文件保留。",
     "abandoned": "本次任务已结束；如需新选题，请开始一个新 Run。",
 }
 
@@ -240,7 +257,14 @@ def prepare_direction_stage(
     must_avoid: list[str],
     binding_id: str | None = None,
     profile: str | None = None,
+    method_selections: list[dict[str, Any]] | None = None,
+    planning_guidance: list[dict[str, Any]] | None = None,
+    audience_scope: str | None = None,
+    allow_experimental: bool = False,
+    output_count: int = 1,
+    batch_item: dict[str, str] | None = None,
 ) -> tuple[dict[str, Any], str]:
+    validate_single_request(output_count, batch_item)
     if not isinstance(topic_original, str) or not topic_original.strip():
         raise SlimRuntimeError(
             "SLIM_ANALYZER_INPUT_INVALID",
@@ -289,6 +313,20 @@ def prepare_direction_stage(
             )
     reference_index = build_reference_index(prepared)
     topic_normalized = _normalize_topic(topic_original)
+    query = _method_search_query(topic_original=topic_original, topic_normalized=topic_normalized,
+                                user_thoughts=user_thoughts, must_keep=must_keep, prepared_references=prepared)
+    if method_selections is not None:
+        candidates = select_method_assets(method_root, method_selections, audience_scope=audience_scope,
+                                           allow_experimental=allow_experimental)
+    else:
+        candidates = search_method_assets(method_root, query=query, audience_scope=audience_scope,
+                                          allow_experimental=allow_experimental)
+    if not prepared and not candidates:
+        raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "content_koubo_slim",
+            detail="no explicit reference or relevant library material selected",
+            workflow_stage="正在寻找本题可用的库内资料",
+            recovery_action="由 Agent 用 discover-methods 查看当前库同行和结构元数据，按本题目的选择后重试；确实缺资料时说明缺口，不要求你先懂结构编号。")
+    guidance = _load_planning_guidance(method_root, planning_guidance or [], audience_scope, allow_experimental)
     business_identity = {
         "client_id": resolved_client_id,
         "speaker_mode": resolved_mode,
@@ -302,6 +340,13 @@ def prepare_direction_stage(
                 "profile_id": selected_profile["profile_id"] if selected_profile else None,
             }
         )
+    if not prepared or method_selections is not None or guidance:
+        business_identity["library_input_sha256"] = canonical_json_hash({
+            "candidates": candidates, "user_thoughts": user_thoughts,
+            "must_keep": must_keep, "must_avoid": must_avoid,
+            "audience_scope": audience_scope, "allow_experimental": allow_experimental, "planning_guidance": guidance})
+    if batch_item is not None:
+        business_identity["batch_item_sha256"] = batch_item_digest(batch_item)
     store = RunStore(runs_root)
     state, created, task_key = store.start_program_task(
         business_identity=business_identity,
@@ -360,17 +405,15 @@ def prepare_direction_stage(
                 "registry_sha256": location.registry_sha256,
             }
         )
+    if "library_input_sha256" in business_identity:
+        frozen_input["library_input_sha256"] = business_identity["library_input_sha256"]
+        frozen_input["source_mode"] = "external_with_library" if prepared else "library"
+        frozen_input["audience_scope"] = audience_scope
+        frozen_input["allow_experimental"] = allow_experimental
+        frozen_input["planning_guidance"] = guidance
+    if batch_item is not None:
+        frozen_input["batch_item"] = batch_item
     store.freeze_task_input(task_key, frozen_input)
-    candidates = search_method_assets(
-        method_root,
-        query=_method_search_query(
-            topic_original=topic_original,
-            topic_normalized=topic_normalized,
-            user_thoughts=user_thoughts,
-            must_keep=must_keep,
-            prepared_references=prepared,
-        ),
-    )
     analyzer_input = validate_analyzer_input(
         {
             "analysis_version": "slim-1.0",
@@ -385,6 +428,7 @@ def prepare_direction_stage(
             "references": [item.analyzer_item() for item in prepared],
             "method_candidates": candidates,
             "revision_request": None,
+            **({"planning_guidance": guidance} if guidance else {}),
         }
     )
     store.write_fixed_json(task_key, "analyzer_input_v1.json", analyzer_input)
@@ -392,7 +436,7 @@ def prepare_direction_stage(
         "status": "working",
         "status_label": "正在拆解并匹配客户内容方向",
         "workflow_stage": "正在拆解并匹配客户内容方向",
-        "message": "参考件和当前客户 04 候选已准备；下一步只生成完整方向，不写正文。",
+        "message": "已准备本题的" + ("外部对标和库内资料" if prepared else "库内同行内容与方法候选") + "；下一步由 Agent 结合你的想法形成具体方向。",
         "next_action": "由 content-koubo-analyzer 生成完整方向后展示 Gate A。",
         "run_exists": True,
         "run_created_now": created,
@@ -621,6 +665,7 @@ def respond_direction(
             artifacts_preserved=True,
         )
     result = direction["analyzer_result"]
+    _verify_planning_guidance(store.read_task_input(task_key), method_root)
     for selected in result["selected_method_assets"]:
         read_method_asset(
             method_root,
@@ -739,6 +784,7 @@ def prepare_context_stage(
     _verify_frozen_manifest(frozen, manifest, workflow_stage="正在准备客户内容资料")
     resolved_mode = resolve_speaker_mode(frozen["speaker_mode"], manifest)
     method_root = resolve_asset_root(location.vault_root, manifest, "method")
+    _verify_planning_guidance(frozen, method_root)
     selected_04_assets: list[dict[str, Any]] = []
     for selected in approved["selected_method_assets"]:
         asset = read_method_asset(
@@ -763,8 +809,9 @@ def prepare_context_stage(
                 "relative_path": asset.relative_path,
                 "page_sha256": asset.page_sha256,
                 "title": asset.title,
-                "source_excerpt": asset.body[:1800].rstrip(),
+                "source_excerpt": complete_method_text(asset),
                 "approved_usage": selected["usage"],
+                **({"source_metadata": method_source_metadata(asset)} if "library_input_sha256" in frozen else {}),
             }
         )
 
@@ -825,6 +872,7 @@ def prepare_context_stage(
     context_input = validate_context_retriever_input(
         {
             "context_version": "slim-1.0",
+            **({"source_mode": "library"} if frozen.get("source_mode") == "library" else {}),
             "client_id": frozen["client_id"],
             "speaker_mode": resolved_mode,
             "task_input": {
@@ -909,6 +957,16 @@ def record_context_result(
     return response, path
 
 
+def _approval_filename(store: RunStore, task_key: str, kind: str, version: int) -> str:
+    legacy = f"approved_{kind}.json"
+    target = store.run_directory(task_key) / "artifacts" / legacy
+    if target.exists() or target.is_symlink():
+        old = store.read_fixed_json(task_key, legacy)
+        if old.get(f"{kind}_version") != version:
+            return f"approved_{kind}_v{version}.json"
+    return legacy
+
+
 def prepare_draft_stage(
     *,
     runs_root: str | Path,
@@ -920,7 +978,7 @@ def prepare_draft_stage(
     store = RunStore(runs_root)
     task_key = _task_key_from_record(store, task_record)
     state = store.get_task(task_key)
-    if state["state"] not in {"context_ready", "draft_pending"}:
+    if state["state"] not in {"context_ready", "draft_pending", "draft_approved", "package_pending", "package_approved", "saved"}:
         raise SlimRuntimeError(
             "SLIM_STATE_TRANSITION_INVALID",
             "content_koubo_slim",
@@ -941,7 +999,7 @@ def prepare_draft_stage(
             artifacts_exist=True,
             artifacts_preserved=True,
         )
-    if state["state"] == "draft_pending" and not feedback:
+    if state["state"] != "context_ready" and not feedback:
         raise SlimRuntimeError(
             "SLIM_DRAFT_RESPONSE_INVALID",
             "content_koubo_slim",
@@ -961,7 +1019,7 @@ def prepare_draft_stage(
     )
     base_version = 0
     previous_draft: dict[str, Any] | None = None
-    if state["state"] == "draft_pending":
+    if state["state"] != "context_ready":
         base_version, current, _ = store.latest_version(task_key, "draft")
         if current.get("draft_version") != base_version:
             raise SlimRuntimeError(
@@ -1061,7 +1119,8 @@ def respond_draft(
     task_key = _task_key_from_record(store, task_record)
     state = store.get_task(task_key)
     decision = _normalize_decision(decision)
-    if state["state"] != "draft_pending":
+    revisable = {"draft_approved", "package_pending", "package_approved", "saved"}
+    if state["state"] != "draft_pending" and not (decision == "需要修改" and state["state"] in revisable):
         raise _current_state_error(
             store=store,
             task_key=task_key,
@@ -1085,6 +1144,8 @@ def respond_draft(
             task_record=task_record,
             revision_feedback=feedback,
         )
+        if state["state"] in revisable:
+            store.transition(task_key, "draft_pending")
         return (
             {
                 "status": "working",
@@ -1139,7 +1200,13 @@ def respond_draft(
         "draft_sha256": canonical_json_hash(draft),
         "decision": "确认正文",
     }
-    store.write_fixed_json(task_key, "approved_draft.json", approval)
+    filename = _approval_filename(store, task_key, "draft", version)
+    target = store.run_directory(task_key) / "artifacts" / filename
+    if target.exists() or target.is_symlink():
+        raise SlimRuntimeError("SLIM_DRAFT_RESPONSE_INVALID", "content_koubo_slim",
+            detail="generate and display a new draft before confirming a reopened draft",
+            workflow_stage="等待你确认正文", run_exists=True, artifacts_exist=True, artifacts_preserved=True)
+    store.write_fixed_json(task_key, filename, approval)
     store.transition(task_key, "draft_approved")
     return (
         {
@@ -1147,7 +1214,7 @@ def respond_draft(
             "status_label": "正文已确认",
             "workflow_stage": "正文已确认",
             "message": "当前正文已确认，可以基于这份正文生成配套文案。",
-            "next_action": "生成标题、发布正文和标签；不要修改已确认正文。",
+            "next_action": CURRENT_STATE_ACTIONS["draft_approved"],
             "run_exists": True,
             "run_created_now": False,
             "artifacts_exist": True,
@@ -1158,9 +1225,9 @@ def respond_draft(
 
 
 def _approved_draft_input(store: RunStore, task_key: str) -> tuple[dict[str, Any], dict[str, Any]]:
-    approval = store.read_fixed_json(task_key, "approved_draft.json")
-    expected_fields = {"approval_version", "draft_version", "draft_sha256", "decision"}
     version, draft, json_path = store.latest_version(task_key, "draft")
+    approval = store.read_fixed_json(task_key, _approval_filename(store, task_key, "draft", version))
+    expected_fields = {"approval_version", "draft_version", "draft_sha256", "decision"}
     try:
         markdown = json_path.with_suffix(".md").read_text(encoding="utf-8")
     except OSError as exc:
@@ -1216,16 +1283,6 @@ def prepare_package_stage(
             artifacts_preserved=store.artifacts_exist(task_key),
         )
     feedback = revision_feedback.strip() if isinstance(revision_feedback, str) else None
-    if state["state"] == "draft_approved" and feedback:
-        raise SlimRuntimeError(
-            "SLIM_PACKAGE_RESPONSE_INVALID",
-            "content_koubo_slim",
-            detail="package_v1 cannot contain revision feedback",
-            workflow_stage="正在生成配套文案",
-            run_exists=True,
-            artifacts_exist=True,
-            artifacts_preserved=True,
-        )
     if state["state"] == "package_pending" and not feedback:
         raise SlimRuntimeError(
             "SLIM_PACKAGE_RESPONSE_INVALID",
@@ -1240,8 +1297,10 @@ def prepare_package_stage(
     approved_draft, approval = _approved_draft_input(store, task_key)
     base_version = 0
     previous_package: dict[str, Any] | None = None
-    if state["state"] == "package_pending":
+    has_packages = any((store.run_directory(task_key) / "artifacts").glob("package_v*.json"))
+    if has_packages:
         base_version, current, _ = store.latest_version(task_key, "package")
+    if state["state"] == "package_pending":
         expected_fields = {
             "contract_version",
             "package_version",
@@ -1286,12 +1345,21 @@ def record_package_result(
     base_package_version: int,
     package_result: dict[str, Any],
     revision_feedback: str | None = None,
+    based_on_draft_version: int | None = None,
 ) -> tuple[dict[str, Any], Path]:
     package_input, task_key = prepare_package_stage(
         runs_root=runs_root,
         task_record=task_record,
         revision_feedback=revision_feedback,
     )
+    current_draft_version = package_input["approved_draft"]["draft_version"]
+    # Old first-draft callers remain compatible; revised drafts require the
+    # generation-time body version, never stamp a late result with a new body.
+    expected_draft_version = 1 if based_on_draft_version is None else based_on_draft_version
+    if type(expected_draft_version) is not int or expected_draft_version != current_draft_version:
+        raise SlimRuntimeError("SLIM_PACKAGE_RESPONSE_INVALID", "content_koubo_slim",
+            detail="publish pack was generated for a different draft version",
+            workflow_stage="正在生成配套文案", run_exists=True, artifacts_exist=True, artifacts_preserved=True)
     if package_input["base_package_version"] != base_package_version:
         raise SlimRuntimeError(
             "SLIM_PACKAGE_RESPONSE_INVALID",
@@ -1351,7 +1419,7 @@ def _package_markdown(approval: dict[str, Any], content: dict[str, Any]) -> str:
     return (
         f"封面标题：{approval['selected_cover_title']}\n\n"
         f"发布标题：{approval['selected_publish_title']}\n\n"
-        f"发布正文：\n{content['publish_copy']}\n\n"
+        f"发布说明：\n{content['publish_copy']}\n\n"
         f"标签：\n{' '.join(content['tags'])}"
     )
 
@@ -1359,6 +1427,7 @@ def _package_markdown(approval: dict[str, Any], content: dict[str, Any]) -> str:
 def _verify_source_snapshot_before_save(
     *, store: RunStore, task_key: str, frozen: dict[str, Any], location: Any, manifest: Any
 ) -> None:
+    _verify_planning_guidance(frozen, resolve_asset_root(location.vault_root, manifest, "method"))
     if "manifest_sha256" not in frozen:
         # Pre-v3 Runs keep their original behavior and remain resumable.
         return
@@ -1409,7 +1478,7 @@ def _save_approved_package(
         approved_draft, draft_approval = _approved_draft_input(store, task_key)
         version, package, _ = store.latest_version(task_key, "package")
         content = validate_publish_pack_result(package.get("content"))
-        approval = store.read_fixed_json(task_key, "approved_package.json")
+        approval = store.read_fixed_json(task_key, _approval_filename(store, task_key, "package", version))
         expected_fields = {
             "approval_version",
             "package_version",
@@ -1465,14 +1534,19 @@ def _save_approved_package(
             manifest=manifest,
         )
         output_root = resolve_asset_root(location.vault_root, manifest, "output")
-        save_markdown_pair(
+        saved_pair = save_markdown_pair(
             output_root=output_root,
             output_template=manifest.output_template,
             client_id=frozen.get("profile_id") or frozen["client_id"],
             selected_publish_title=approval["selected_publish_title"],
             oral_body=approved_draft["body"],
             package_markdown=_package_markdown(approval, content),
+            draft_version=approved_draft["draft_version"],
+            item_suffix=save_suffix(frozen.get("batch_item")),
         )
+        if frozen.get("batch_item") is not None:
+            store.write_fixed_json(task_key, f"saved_pair_v{approved_draft['draft_version']}.json",
+                {key: str(value) if isinstance(value, Path) else value for key, value in saved_pair.items()})
         store.transition(task_key, "saved")
     except SlimRuntimeError as exc:
         current = store.get_task(task_key)
@@ -1611,6 +1685,11 @@ def respond_package(
             artifacts_preserved=True,
         )
     _, draft_approval = _approved_draft_input(store, task_key)
+    if (package.get("based_on_draft_version") != draft_approval["draft_version"]
+            or package.get("based_on_draft_sha256") != draft_approval["draft_sha256"]):
+        raise SlimRuntimeError("SLIM_PACKAGE_RESPONSE_INVALID", "content_koubo_slim",
+            detail="package belongs to an earlier draft; generate new package before confirming",
+            run_exists=True, artifacts_exist=True, artifacts_preserved=True)
     approval = {
         "approval_version": "content-koubo-slim-approved-package-v1",
         "package_version": version,
@@ -1622,7 +1701,7 @@ def respond_package(
         "decision": "确认并保存",
         "publish_status": "not_requested",
     }
-    store.write_fixed_json(task_key, "approved_package.json", approval)
+    store.write_fixed_json(task_key, _approval_filename(store, task_key, "package", version), approval)
     store.transition(task_key, "package_approved")
     return _save_approved_package(
         registry_path=registry_path,
@@ -1632,7 +1711,19 @@ def respond_package(
 
 
 def _start(args: argparse.Namespace) -> dict[str, Any]:
-    response, _ = prepare_direction_stage(
+    selections = None
+    guidance = None
+    if args.method_selection:
+        try:
+            selections = json.loads(Path(args.method_selection).read_text(encoding="utf-8"))
+            if isinstance(selections, dict):
+                if set(selections) - {"materials", "planning_guidance"} or "materials" not in selections:
+                    raise ValueError("selection object requires materials and optional planning_guidance")
+                guidance = selections.get("planning_guidance", [])
+                selections = selections["materials"]
+        except (OSError, UnicodeError, ValueError) as exc:
+            raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "content_koubo_slim", detail=str(exc)) from exc
+    request = dict(
         registry_path=args.registry,
         runs_root=args.runs_root,
         client_id=args.client_id,
@@ -1644,8 +1735,53 @@ def _start(args: argparse.Namespace) -> dict[str, Any]:
         must_avoid=args.must_avoid,
         binding_id=args.binding_id,
         profile=args.profile,
+        method_selections=selections,
+        planning_guidance=guidance,
+        audience_scope=args.audience_scope,
+        allow_experimental=args.allow_experimental,
     )
-    return response
+    return start_request(prepare_direction_stage, request, output_count=args.output_count, plan_path=args.batch_plan)
+
+
+def _discover_methods(args: argparse.Namespace) -> dict[str, Any]:
+    registry = load_effective_registry(args.registry)
+    binding = select_client_id(registry, args.client_id, requested_binding_id=args.binding_id)
+    location = resolve_client(registry, binding)
+    manifest = load_manifest(location.manifest_path, expected_client_id=location.client_id)
+    if location.knowledge_base_id is not None and location.knowledge_base_id != manifest.knowledge_base_id:
+        raise SlimRuntimeError("SLIM_MANIFEST_INVALID", "content_koubo_slim", detail="binding differs from Manifest")
+    root = resolve_asset_root(location.vault_root, manifest, "method")
+    if args.read_path:
+        if not args.expected_sha256 or not re.fullmatch(r"[0-9a-f]{64}", args.expected_sha256):
+            raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "content_koubo_slim", detail="read requires discovered snapshot hash")
+        asset = read_method_asset(root, args.read_path, expected_sha256=args.expected_sha256, include_guidance=True)
+        if not method_is_usable(asset, args.audience_scope, args.allow_experimental):
+            raise SlimRuntimeError("SLIM_METHOD_ASSET_INVALID", "content_koubo_slim", detail="material is excluded for this audience or usage scope")
+        return {"wrote": False, "asset_id": asset.asset_id, "method_kind": method_kind(asset),
+                "page_sha256": asset.page_sha256, "source_metadata": method_source_metadata(asset),
+                "content": complete_method_text(asset)}
+    return discover_method_assets(root, offset=args.offset, limit=args.limit,
+                                  audience_scope=args.audience_scope, allow_experimental=args.allow_experimental)
+
+
+def _load_planning_guidance(root, selections, audience_scope, allow_experimental):
+    if not isinstance(selections, list) or len(selections) > 3:
+        raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "content_koubo_slim", detail="at most three planning guides")
+    result, ids = [], set()
+    for item in selections:
+        if not isinstance(item, dict) or set(item) != {"relative_path", "page_sha256", "reason"} or not isinstance(item["reason"], str) or not item["reason"].strip() or not isinstance(item["page_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", item["page_sha256"]):
+            raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "content_koubo_slim", detail="invalid planning guide selection")
+        asset = read_method_asset(root, item["relative_path"], expected_sha256=item["page_sha256"], include_guidance=True)
+        if method_kind(asset) not in {"selection_guide", "index", "methodology"} or asset.asset_id in ids or not method_is_usable(asset, audience_scope, allow_experimental):
+            raise SlimRuntimeError("SLIM_METHOD_ASSET_INVALID", "content_koubo_slim", detail="not permitted planning guidance")
+        ids.add(asset.asset_id)
+        result.append({**item, "asset_id": asset.asset_id, "content": complete_method_text(asset)})
+    return result
+
+
+def _verify_planning_guidance(frozen, root):
+    for item in frozen.get("planning_guidance", []):
+        read_method_asset(root, item["relative_path"], expected_sha256=item["page_sha256"], include_guidance=True)
 
 
 def _configure(args: argparse.Namespace) -> dict[str, Any]:
@@ -1866,6 +2002,7 @@ def _record_package(args: argparse.Namespace) -> dict[str, Any]:
         base_package_version=args.base_package_version,
         package_result=result,
         revision_feedback=args.feedback,
+        based_on_draft_version=args.based_on_draft_version,
     )
     return response
 
@@ -1897,7 +2034,7 @@ def _status(args: argparse.Namespace) -> dict[str, Any]:
         "status_label": label,
         "workflow_stage": label,
         "message": f"当前任务状态：{label}。",
-        "next_action": "按当前阶段继续；不要跳过真人确认。" if not terminal else "本次任务无需继续。",
+        "next_action": CURRENT_STATE_ACTIONS[state["state"]],
         "run_exists": True,
         "run_created_now": False,
         "artifacts_exist": artifacts_exist,
@@ -1924,6 +2061,18 @@ def build_parser() -> argparse.ArgumentParser:
     configure.add_argument("--confirmation")
     configure.set_defaults(handler=_configure)
 
+    discovery = subparsers.add_parser("discover-methods", help="internal: bounded library metadata for semantic material selection")
+    _add_registry_argument(discovery)
+    discovery.add_argument("--client-id")
+    discovery.add_argument("--binding-id")
+    discovery.add_argument("--audience-scope", choices=("consumer", "internal_sales_training"))
+    discovery.add_argument("--allow-experimental", action="store_true", help="only for explicitly authorized experiment tasks")
+    discovery.add_argument("--offset", type=int, default=0)
+    discovery.add_argument("--limit", type=int, default=40)
+    discovery.add_argument("--read-path")
+    discovery.add_argument("--expected-sha256")
+    discovery.set_defaults(handler=_discover_methods)
+
     start = subparsers.add_parser("start", help="prepare one Run through Analyzer input")
     _add_registry_argument(start)
     _add_runs_root_argument(start)
@@ -1932,11 +2081,21 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--profile", help="active Profile id, display name, or unique alias")
     start.add_argument("--speaker-mode", choices=("personal_ip", "company_brand", "neutral"))
     start.add_argument("--topic-original", required=True)
-    start.add_argument("--reference", action="append", required=True)
+    start.add_argument("--reference", action="append", default=[])
+    start.add_argument("--method-selection", help="internal JSON list selected from discover-methods")
+    start.add_argument("--audience-scope", choices=("consumer", "internal_sales_training"))
+    start.add_argument("--allow-experimental", action="store_true", help="only for explicitly authorized experiment tasks")
     start.add_argument("--user-thoughts")
     start.add_argument("--must-keep", action="append", default=[])
     start.add_argument("--must-avoid", action="append", default=[])
+    start.add_argument("--output-count", type=int, default=1)
+    start.add_argument("--batch-plan", help="internal JSON plan for independent deliverables")
     start.set_defaults(handler=_start)
+
+    batch = subparsers.add_parser("batch-status", help="internal: verify batch progress and saved files")
+    _add_runs_root_argument(batch)
+    batch.add_argument("--batch-id", required=True)
+    batch.set_defaults(handler=lambda args: batch_status(RunStore(args.runs_root), args.batch_id))
 
     record = subparsers.add_parser("record-direction", help="internal: validate Analyzer result")
     _add_runs_root_argument(record)
@@ -2019,6 +2178,7 @@ def build_parser() -> argparse.ArgumentParser:
     record_package.add_argument("--base-package-version", required=True, type=int)
     record_package.add_argument("--package-result", required=True)
     record_package.add_argument("--feedback")
+    record_package.add_argument("--based-on-draft-version", type=int, help="body version from prepare-package; required after body revisions")
     record_package.set_defaults(handler=_record_package)
 
     respond_package_parser = subparsers.add_parser(
@@ -2043,7 +2203,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    host_parser = argparse.ArgumentParser(add_help=False)
+    host_parser.add_argument("--host", choices=("codex", "workbuddy"))
+    host_parser.add_argument("--host-root")
+    host, remaining = host_parser.parse_known_args(argv)
+    if host.host and host.host_root:
+        host_parser.error("choose --host or --host-root, not both")
+    if host.host_root:
+        root = Path(host.host_root).expanduser()
+        if not root.is_absolute():
+            host_parser.error("--host-root must be absolute")
+        os.environ["CONTENT_KOUBO_HOME"] = str(root)
+    elif host.host:
+        os.environ["CONTENT_KOUBO_HOME"] = str(Path.home() / (".workbuddy" if host.host == "workbuddy" else ".codex"))
+    args = build_parser().parse_args(remaining)
     try:
         response = args.handler(args)
         exit_code = 0
