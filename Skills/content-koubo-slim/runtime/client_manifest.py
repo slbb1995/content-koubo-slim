@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .client_registry import CLIENT_ID_PATTERN
+from .client_registry import CLIENT_ID_PATTERN, _reject_reparse
 from .content_source import CONTRACT_VERSION as COMMON_CONTRACT_VERSION, WORKFLOW, validate_common_manifest
 from .error_model import SlimRuntimeError
 
@@ -142,6 +142,13 @@ def validate_manifest(data: Any, expected_client_id: str | None = None) -> Clien
 
 
 def load_manifest(path: str | Path, expected_client_id: str | None = None) -> ClientManifest:
+    from .feishu_source import FeishuDocument, remote_json
+    if isinstance(path, FeishuDocument):
+        data, digest = remote_json(path)
+        manifest = validate_manifest(data, expected_client_id)
+        if data["backend"] != "feishu" or data["locator"] != path.space.locator:
+            raise SlimRuntimeError("SLIM_MANIFEST_INVALID", "client_manifest", detail="Feishu Manifest locator differs")
+        return ClientManifest(**{**manifest.__dict__, "manifest_sha256": digest})
     try:
         raw = Path(path).read_bytes()
         data = json.loads(raw.decode("utf-8"))
@@ -169,10 +176,17 @@ def resolve_asset_root(
 ) -> Path:
     """Resolve one Manifest-authorized logical root without following symlinks."""
 
+    from .feishu_source import FeishuSpace, FeishuRoot
+    if isinstance(vault_root, FeishuSpace):
+        if logical_name not in ASSET_ROOT_FIELDS:
+            raise SlimRuntimeError("SLIM_MANIFEST_INVALID", "client_manifest", detail="unknown logical root")
+        return FeishuRoot(vault_root, manifest.asset_roots[logical_name], logical_name)
+
     try:
         if logical_name not in ASSET_ROOT_FIELDS:
             raise ValueError("unknown logical asset root")
         root = Path(vault_root)
+        _reject_reparse(root)
         if not root.is_absolute() or root.is_symlink() or not root.is_dir():
             raise ValueError("vault root must be an existing real directory")
         root_resolved = root.resolve(strict=True)
@@ -180,8 +194,7 @@ def resolve_asset_root(
         current = root_resolved
         for part in relative.parts:
             current /= part
-            if current.is_symlink():
-                raise ValueError("asset root path contains a symlink")
+            _reject_reparse(current)
         lexical = Path(os.path.abspath(current))
         resolved = lexical.resolve(strict=True)
         resolved.relative_to(root_resolved)

@@ -92,6 +92,6 @@ description: Content 口播 Slim 的配套文案生成 Skill。用于同一 Run 
 
 ## 最小示例
 
-编排器提供已确认 `draft_v2`。生成完整 `package_v1` 后，用户说“第二个发布标题太抽象，改得更具体”，则只根据同一正文和当前配套生成 `package_v2`；用户确认时停止，由程序保存两份 Markdown。
+编排器提供已确认 `draft_v2`。生成完整 `package_v1` 后，用户说“第二个发布标题太抽象，改得更具体”，则只根据同一正文和当前配套生成 `package_v2`；用户确认时停止，由程序保存纯口播和配套两份产物（Obsidian：两个 Markdown；飞书：两份云文档）。
 
 设计原因保存在 Factory 设计卡；版本、最终确认、路径和双文件保存由 `content-koubo-slim` Runtime 负责。

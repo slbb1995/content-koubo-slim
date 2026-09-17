@@ -1,13 +1,13 @@
 ---
 name: content-koubo-slim
-description: Content 口播 Slim 的唯一用户入口。用于开始、继续、恢复或查看单篇或多篇短视频口播任务，每篇以独立 Run 协调状态、版本和三次真人确认；P5 可在正文确认后调用 content-koubo-publish-pack，确认配套后 create-only 保存两份 Markdown 并保持未发布。仅做编排；不得亲自拆解、检索语义、写稿、发布或调用旧 Content V1 Skill。
+description: Content 口播 Slim 的唯一用户入口。使用已连接的 Obsidian 或飞书知识库，开始、继续、恢复或查看单篇或多篇短视频口播任务，每篇以独立 Run 协调状态、版本和方向、正文、配套三次真人确认；确认配套后 create-only 保存纯口播稿和发布配套两份产物并保持未发布。仅做编排；不得亲自拆解、检索语义、写稿、发布或调用旧 Content V1 Skill。
 ---
 
 # Content 口播 Slim
 
 ## 一句话目的
 
-用一个入口管理单篇或多篇 Content 口播 Slim 任务，每篇独立推进；P5 推进到配套确认和两份 Markdown 安全保存，然后保持未发布并停下。
+用一个入口管理单篇或多篇 Content 口播 Slim 任务，每篇独立推进；P5 推进到配套确认和两份产物安全保存：Obsidian 为两个 Markdown 文件，飞书为两份云文档，然后保持未发布并停下。
 
 ## 什么时候使用
 
@@ -16,7 +16,7 @@ description: Content 口播 Slim 的唯一用户入口。用于开始、继续�
 - 记录方向的认可、普通修改或不采用；
 - 生成正文后记录“确认正文”或带具体意见的“需要修改”；
 - 生成配套后记录“确认并保存”或带具体意见的“需要修改”；
-- 配套确认后调用确定性保存，一次写入并回读两份 Markdown；
+- 配套确认后调用确定性保存，分别写入并回读纯口播稿、发布配套两份产物；
 - 通过确定性 Runtime 复用同一个 Run、保存版本并推进合法状态。
 
 ## 什么时候不要使用
@@ -74,7 +74,7 @@ description: Content 口播 Slim 的唯一用户入口。用于开始、继续�
 
 ## 执行流程
 
-1. 从公共或兼容旧 Registry 定位一个 Obsidian binding；飞书 binding 必须明确返回“不支持口播直接读取”，不得猜本地同步目录；
+1. 从公共或兼容旧 Registry 定位一个已连接的 binding；Obsidian 使用本地根，飞书使用空间和文档引用，原生读取 Manifest 与 Profile 索引，不猜本地同步目录。需要检查连接时使用 `preflight`，不创建 Run；尚未连接口播的已有飞书 binding 使用 `configure-feishu` 零写入预览，明确授权后才定向合并口播配置；
 2. 校验 Manifest、Profile 索引，解析 `speaker_mode` 和本次 Profile；
 3. 在创建 Run 前验证所有显式参考可读；显式给出的参考失效时停止，不静默切换库内来源；没有外部参考时进入库内选材；
 4. 调用 `$content-koubo-analyzer` 的选材阶段，用 `discover-methods` 返回的同库少量目录与完整候选做语义判断。先找同行的问题、观点和内容价值，再按需要结合结构；有外部参考时优先分析用户参考。入口只传递资料和选择结果，不亲自做语义分析。细则读 `references/idea-first-materials.md`；
@@ -127,7 +127,7 @@ Gate A 只接受：`认可整版方向 / 需要修改 / 不采用`。正文确�
 - 不扫描未授权目录，不把客户名、行业或物理路径写死进共享 Skill；
 - Writer 只允许读取一份 `content_context_v1.json`；不调用三个旧 Writer，不搜索 Vault，不重选模式；
 - 配套 Skill 不读取 Vault、不修改或重复输出已确认正文；
-- P5 只写 Manifest 授权输出根下的两份最终 Markdown，不修改客户 Vault 的 01—05；
+- P5 只写 Manifest 授权输出根下的两份最终产物，不修改客户 01—05；飞书只保存到授权的 07 下，两个文档全部回读匹配才完成；
 - 不调用旧标题、分发或保存 Skill，不增加 Reviewer、状态、发布能力或 P6 产物；
 - 不修改客户 RC、Host、main、Tag，不执行客户内容的 Git、推送、同步、上传或发布。
 
@@ -145,6 +145,8 @@ Gate A 只接受：`认可整版方向 / 需要修改 / 不采用`。正文确�
 - `runtime/vault_search.py`、`vault_reader.py`：Manifest 限定的 04 搜索/回读，以及 P3 授权 03 的局部检索和条件 05 回读；
 - `runtime/schema_validation.py`：Analyzer、Gate A、唯一 Context Pack、正文与配套输出边界；
 - `runtime/vault_save.py`：Manifest 授权输出根下的双文件 create-only 保存与回读；
+- `runtime/local_save_receipt.py`、`references/local-save-recovery.md`：本地保存回执、已核验文件复用和未知结果停止边界；
+- `references/feishu-backend.md`：飞书配置、只读预检、来源边界与双文档失败恢复；
 - `runtime/error_model.py`：用户响应与技术记录分离；
 - `schemas/`：公共 Registry、Manifest、Profile 索引与旧 v2 兼容合同。
 

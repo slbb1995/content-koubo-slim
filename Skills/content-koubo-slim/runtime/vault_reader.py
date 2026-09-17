@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from html import unescape
 import json
 import os
 import re
@@ -11,11 +12,16 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .error_model import SlimRuntimeError
+from .feishu_source import (
+    FeishuDocument, FeishuRoot, assert_below, iter_documents,
+    parse_relative_ref, raw_token, read_document,
+)
 
 
 ASSET_ROLE_BY_TYPE = {
     "benchmark_deconstruction": "peer_content_asset",
     "peer_content_asset": "peer_content_asset",
+    "viral_template_deconstruction": "peer_content_asset",
     "oral_structure": "oral_method_asset",
     "oral_method_asset": "oral_method_asset",
     "content_method_asset": "oral_method_asset",
@@ -56,7 +62,13 @@ class ProfileAsset:
     display_name: str | None = None
 
 
-def safe_method_root(value: str | Path) -> Path:
+def safe_method_root(value: str | Path | FeishuRoot) -> Path | FeishuRoot:
+    if isinstance(value, FeishuRoot):
+        if value.logical_name not in {'method', 'content'}:
+            raise SlimRuntimeError('SLIM_METHOD_ROOT_INVALID', 'vault_reader',
+                detail='method retrieval requires the authorized content root')
+        assert_below(value.space, value.token, value.token)
+        return value
     try:
         lexical = Path(os.path.abspath(Path(value)))
         if lexical.is_symlink() or not lexical.is_dir():
@@ -87,12 +99,28 @@ def _safe_relative_path(value: str) -> PurePosixPath:
 
 def _split_frontmatter(text: str) -> tuple[list[str], str]:
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    # Feishu emits a native <title> line when the document title differs from
+    # the first body H1. Accept exactly one leading title element, followed by
+    # blank lines and frontmatter; never scan arbitrary body text for it.
+    native_title = re.match(
+        r'^<title>[^<\n]+</title>\n(?:[ \t]*\n)*(?=---\n)', normalized
+    )
+    if native_title:
+        normalized = normalized[native_title.end():]
+    # Feishu may render the document's H1 ahead of its metadata block. Only
+    # accept a leading heading plus blank lines, never scan arbitrary body text.
+    heading = re.match(r'^(#[ \t]+[^\n]+)\n(?:[ \t]*\n)*(?=---\n)', normalized)
+    prefix = ''
+    if heading:
+        prefix = heading.group(1) + '\n\n'
+        normalized = normalized[heading.end():]
     if not normalized.startswith("---\n"):
         raise ValueError("method asset has no frontmatter")
     end = normalized.find("\n---\n", 4)
     if end < 0:
         raise ValueError("method asset frontmatter is not closed")
-    return normalized[4:end].splitlines(), normalized[end + 5 :]
+    body = normalized[end + 5 :]
+    return normalized[4:end].splitlines(), prefix + body.lstrip('\n') if prefix else body
 
 
 def _scalar(value: str) -> Any:
@@ -156,26 +184,34 @@ def _string_list(value: Any, field: str) -> tuple[str, ...]:
 
 
 def read_method_asset(
-    method_root: str | Path,
+    method_root: str | Path | FeishuRoot,
     relative_path: str,
     *,
     expected_sha256: str | None = None,
     include_guidance: bool = False,
 ) -> MethodAsset:
     root = safe_method_root(method_root)
+    # Remote transport/authorization errors must never become skippable metadata
+    # errors in search. Only the parser below is inside the conversion boundary.
+    if isinstance(root, FeishuRoot):
+        token = parse_relative_ref(relative_path)
+        relative_name = 'feishu:' + token
+        raw = read_document(FeishuDocument(root.space, token), root.token).encode('utf-8')
     try:
-        relative = _safe_relative_path(relative_path)
-        lexical = root.joinpath(*relative.parts)
-        current = root
-        for part in relative.parts:
-            current /= part
-            if current.is_symlink():
-                raise ValueError("method asset path contains a symlink")
-        if not lexical.is_file() or lexical.is_symlink():
-            raise ValueError("method asset must be a regular file")
-        resolved = lexical.resolve(strict=True)
-        resolved.relative_to(root)
-        raw = resolved.read_bytes()
+        if not isinstance(root, FeishuRoot):
+            relative = _safe_relative_path(relative_path)
+            relative_name = relative.as_posix()
+            lexical = root.joinpath(*relative.parts)
+            current = root
+            for part in relative.parts:
+                current /= part
+                if current.is_symlink():
+                    raise ValueError("method asset path contains a symlink")
+            if not lexical.is_file() or lexical.is_symlink():
+                raise ValueError("method asset must be a regular file")
+            resolved = lexical.resolve(strict=True)
+            resolved.relative_to(root)
+            raw = resolved.read_bytes()
         page_sha256 = hashlib.sha256(raw).hexdigest()
         if expected_sha256 is not None and page_sha256 != expected_sha256:
             raise ValueError("method asset changed after selection")
@@ -211,7 +247,7 @@ def read_method_asset(
         return MethodAsset(
             asset_id=asset_id.strip(),
             asset_role=ASSET_ROLE_BY_TYPE.get(asset_type, "oral_method_asset"),
-            relative_path=relative.as_posix(),
+            relative_path=relative_name,
             page_sha256=page_sha256,
             audience_scope=audience_scope,
             title=title_match.group(1).strip(),
@@ -232,8 +268,11 @@ def read_method_asset(
 
 
 def _safe_authorized_root(
-    value: str | Path, *, error_code: str, logical_name: str
-) -> Path:
+    value: str | Path | FeishuRoot, *, error_code: str, logical_name: str
+) -> Path | FeishuRoot:
+    if isinstance(value, FeishuRoot):
+        assert_below(value.space, value.token, value.token)
+        return value
     try:
         lexical = Path(os.path.abspath(Path(value)))
         if lexical.is_symlink() or not lexical.is_dir():
@@ -251,7 +290,7 @@ def _safe_authorized_root(
         ) from exc
 
 
-def safe_knowledge_root(value: str | Path) -> Path:
+def safe_knowledge_root(value: str | Path | FeishuRoot) -> Path | FeishuRoot:
     return _safe_authorized_root(
         value,
         error_code="SLIM_KNOWLEDGE_ASSET_INVALID",
@@ -306,7 +345,7 @@ def _read_markdown_below(
 
 
 def read_knowledge_asset(
-    knowledge_root: str | Path,
+    knowledge_root: str | Path | FeishuRoot,
     relative_path: str,
     *,
     expected_sha256: str | None = None,
@@ -316,6 +355,12 @@ def read_knowledge_asset(
         error_code="SLIM_KNOWLEDGE_ASSET_INVALID",
         logical_name="knowledge_root",
     )
+    if isinstance(root, FeishuRoot):
+        digest, title, body, metadata = _read_remote_asset(
+            root, relative_path, error_code='SLIM_KNOWLEDGE_ASSET_INVALID',
+            expected_sha256=expected_sha256,
+        )
+        return KnowledgeAsset(relative_path, digest, title, body, metadata or {})
     digest, title, body = _read_markdown_below(
         root,
         relative_path,
@@ -348,13 +393,29 @@ def read_knowledge_asset(
 
 
 def read_primary_profile(
-    profile_root: str | Path, selector: dict[str, Any]
+    profile_root: str | Path | FeishuRoot, selector: dict[str, Any]
 ) -> ProfileAsset:
     root = _safe_authorized_root(
         profile_root,
         error_code="SLIM_PROFILE_INVALID",
         logical_name="profile_root",
     )
+    if isinstance(root, FeishuRoot):
+        matches = []
+        for document in iter_documents(root):
+            relative = 'feishu:' + document.token
+            digest, title, body, metadata = _read_remote_asset(
+                root, relative, error_code='SLIM_PROFILE_INVALID',
+            )
+            if metadata is not None and metadata.get('status') == 'active' and all(
+                metadata.get(key) == expected for key, expected in selector.items()
+            ):
+                matches.append(ProfileAsset(relative, digest, title, body,
+                    metadata.get('profile_id'), metadata.get('display_name')))
+        if len(matches) != 1:
+            raise SlimRuntimeError('SLIM_PROFILE_INVALID', 'vault_reader',
+                detail=f'expected one active primary profile, found {len(matches)}')
+        return matches[0]
     matches: list[ProfileAsset] = []
     for candidate in sorted(root.rglob("*.md")):
         relative = candidate.relative_to(root).as_posix()
@@ -417,7 +478,7 @@ def read_primary_profile(
 
 
 def read_selected_profile(
-    profile_root: str | Path, profile_record: dict[str, Any]
+    profile_root: str | Path | FeishuRoot, profile_record: dict[str, Any]
 ) -> ProfileAsset:
     """Read exactly the Profile selected from content-profile-index.json."""
 
@@ -427,6 +488,44 @@ def read_selected_profile(
         logical_name="profile_root",
     )
     try:
+        if isinstance(root, FeishuRoot):
+            token = raw_token(profile_record['object_ref'])
+            if profile_record.get('status') != 'active':
+                raise ValueError('selected Profile index record is not active')
+            for field in ('profile_id', 'display_name'):
+                identity = profile_record.get(field)
+                if not isinstance(identity, str) or not identity.strip():
+                    raise ValueError('selected Profile index lacks ' + field)
+            expected = profile_record.get('content_sha256')
+            if not isinstance(expected, str) or not re.fullmatch(r'[0-9a-f]{64}', expected):
+                raise ValueError('selected Profile requires an exact content_sha256')
+            digest, title, body, metadata = _read_remote_asset(
+                root, 'feishu:' + token, error_code='SLIM_PROFILE_INVALID',
+                expected_sha256=expected,
+            )
+            if metadata is not None:
+                # Even empty frontmatter is an explicit metadata declaration;
+                # it must pass the same conflict checks as other YAML profiles.
+                if metadata.get('status') != 'active':
+                    raise ValueError('selected Profile is no longer active')
+                for field in ('profile_id', 'display_name'):
+                    if metadata.get(field) != profile_record[field]:
+                        raise ValueError('selected Profile ' + field + ' changed')
+            else:
+                # Native documents use the validated index identity, bound to
+                # this exact ref/hash/root. Body text (including legacy IDs) is
+                # content, never an alternative identity declaration.
+                native_title = re.match(r'<title>([^<]+)</title>', body)
+                if native_title and native_title.group(1).strip():
+                    title = unescape(native_title.group(1)).strip()
+                else:
+                    node = assert_below(root.space, token, root.token)
+                    title = node.get('title')
+                    if not isinstance(title, str) or not title.strip():
+                        raise ValueError('native Profile node title is missing')
+                    title = title.strip()
+            return ProfileAsset('feishu:' + token, digest, title, body,
+                profile_record['profile_id'], profile_record['display_name'])
         object_ref = profile_record["object_ref"]
         if not isinstance(object_ref, str):
             raise ValueError("Profile object_ref is invalid")
@@ -471,3 +570,31 @@ def read_selected_profile(
             artifacts_exist=True,
             artifacts_preserved=True,
         ) from exc
+
+
+def _read_remote_asset(
+    root: FeishuRoot, relative_path: str, *, error_code: str,
+    expected_sha256: str | None = None,
+) -> tuple[str, str, str, dict[str, Any] | None]:
+    """One authorized fetch supplies both metadata and the exact hashed body."""
+    token = parse_relative_ref(relative_path)
+    text = read_document(FeishuDocument(root.space, token), root.token)
+    try:
+        digest = hashlib.sha256(text.encode('utf-8')).hexdigest()
+        if expected_sha256 is not None and digest != expected_sha256:
+            raise ValueError('asset changed after selection')
+        # None distinguishes native Markdown from present-but-empty YAML.
+        metadata = None
+        body = text
+        if text.startswith('---\n'):
+            lines, body = _split_frontmatter(text)
+            metadata = _frontmatter(lines)
+        title_match = re.search(r'(?m)^#\s+(.+?)\s*$', body)
+        title = title_match.group(1).strip() if title_match else token
+        if not body.strip():
+            raise ValueError('asset body is empty')
+        return digest, title, body.strip(), metadata
+    except (UnicodeError, TypeError, ValueError) as exc:
+        raise SlimRuntimeError(error_code, 'vault_reader', detail=str(exc),
+            workflow_stage='正在准备客户内容资料', run_exists=True,
+            artifacts_exist=True, artifacts_preserved=True) from exc

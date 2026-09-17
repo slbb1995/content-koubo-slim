@@ -16,6 +16,7 @@ from .error_model import SlimRuntimeError
 
 CONTRACT_VERSION = "content-source-v1"
 WORKFLOW = "content-koubo-slim"
+SUPPORTED_WORKFLOWS = {"content-koubo-slim", "content-gzh-slim"}
 MANIFEST_RELATIVE = "06-Agent与Workflow/content-source-manifest.json"
 PROFILE_INDEX_RELATIVE = "06-Agent与Workflow/content-profile-index.json"
 PROFILE_ID = re.compile(r"^PRF-[A-F0-9]{16}$")
@@ -45,12 +46,25 @@ def default_common_registry_path() -> Path:
 
 
 def _relative(value: Any, field: str) -> str:
-    if not isinstance(value, str) or not value or "\\" in value:
+    if not isinstance(value, str) or not value or "\\" in value or ":" in value:
         raise ValueError(f"{field} must be a relative POSIX path")
+    if any(part in {"", ".", ".."} for part in value.split("/")):
+        raise ValueError(f"{field} contains unsafe path segments")
     path = PurePosixPath(value)
     if path.is_absolute() or not path.parts or any(part in {"", ".", ".."} for part in path.parts):
         raise ValueError(f"{field} must stay below the knowledge-base root")
     return path.as_posix()
+
+
+def _revision(value: Any) -> None:
+    if type(value) is not int or value < 1:
+        raise ValueError("revision must be an integer greater than zero")
+
+
+def _workflows(value: Any) -> None:
+    if (not isinstance(value, list) or any(not isinstance(item, str) or item not in SUPPORTED_WORKFLOWS for item in value)
+            or len(value) != len(set(value))):
+        raise ValueError("unsupported or duplicate workflows")
 
 
 def _no_credentials(value: Any) -> None:
@@ -88,6 +102,7 @@ def validate_common_registry(value: Any) -> dict[str, Any]:
             raise ValueError("common Registry fields are invalid")
         if value["contract_version"] != CONTRACT_VERSION or not isinstance(value["bindings"], dict):
             raise ValueError("common Registry version or bindings are invalid")
+        _revision(value["revision"])
         for binding_id, binding in value["bindings"].items():
             fields = {"binding_id", "client_id", "knowledge_base_id", "backend", "locator", "manifest_ref", "profile_index_ref", "supported_workflows", "workflow_defaults", "status"}
             if not BINDING_ID.fullmatch(str(binding_id)) or not isinstance(binding, dict) or set(binding) != fields or binding.get("binding_id") != binding_id:
@@ -96,12 +111,21 @@ def validate_common_registry(value: Any) -> dict[str, Any]:
                 raise ValueError("knowledge_base_id is invalid")
             if binding["backend"] not in {"obsidian", "feishu"} or binding["status"] not in {"active", "disabled"}:
                 raise ValueError("binding backend or status is invalid")
+            if not isinstance(binding["client_id"], str) or not binding["client_id"].strip():
+                raise ValueError("binding client_id is invalid")
             if not isinstance(binding["locator"], dict) or not binding["locator"]:
                 raise ValueError("binding locator is invalid")
             _no_credentials(binding["locator"])
+            if binding["backend"] == "obsidian":
+                if set(binding["locator"]) != {"vault_root"} or not isinstance(binding["locator"]["vault_root"], str) or not binding["locator"]["vault_root"].strip():
+                    raise ValueError("Obsidian locator must contain vault_root")
+                _relative(binding["manifest_ref"], "manifest_ref")
+                _relative(binding["profile_index_ref"], "profile_index_ref")
+            else:
+                if any(not isinstance(binding[field], str) or not re.fullmatch(r"[A-Za-z0-9]+", binding[field]) for field in ("manifest_ref", "profile_index_ref")):
+                    raise ValueError("Feishu configuration refs must be object tokens")
             workflows = binding["supported_workflows"]
-            if not isinstance(workflows, list) or len(workflows) != len(set(workflows)):
-                raise ValueError("binding workflows are invalid")
+            _workflows(workflows)
             defaults = binding["workflow_defaults"]
             if not isinstance(defaults, dict) or set(defaults) - set(workflows):
                 raise ValueError("binding workflow defaults are invalid")
@@ -110,14 +134,14 @@ def validate_common_registry(value: Any) -> dict[str, Any]:
                     raise ValueError("binding workflow default entry is invalid")
                 if not isinstance(default["use_no_ip"], bool) or default["use_no_ip"] and default["profile_id"] is not None:
                     raise ValueError("binding workflow default IP policy is invalid")
+                if default["profile_id"] is not None and (not isinstance(default["profile_id"], str) or not PROFILE_ID.fullmatch(default["profile_id"])):
+                    raise ValueError("binding default Profile id is invalid")
         defaults = value["workflow_defaults"]
-        if not isinstance(defaults, dict):
+        if not isinstance(defaults, dict) or set(defaults) - SUPPORTED_WORKFLOWS:
             raise ValueError("workflow defaults are invalid")
         for workflow, binding_id in defaults.items():
             if binding_id not in value["bindings"] or workflow not in value["bindings"][binding_id]["supported_workflows"]:
                 raise ValueError("workflow default points to an incompatible binding")
-        if not isinstance(value["revision"], int) or value["revision"] < 1:
-            raise ValueError("Registry revision is invalid")
         return value
     except (KeyError, TypeError, ValueError) as exc:
         raise SlimRuntimeError("SLIM_REGISTRY_NOT_READABLE", "content_source", detail=str(exc)) from exc
@@ -165,6 +189,11 @@ def validate_common_manifest(value: Any, *, expected: dict[str, Any] | None = No
             raise ValueError("common Manifest fields or version are invalid")
         if not KNOWLEDGE_BASE_ID.fullmatch(str(value["knowledge_base_id"])):
             raise ValueError("Manifest knowledge_base_id is invalid")
+        _revision(value["revision"])
+        for field, minimum in (("client_id", 3), ("knowledge_base_name", 1), ("locator", 1)):
+            if not isinstance(value[field], str) or len(value[field].strip()) < minimum:
+                raise ValueError(f"Manifest {field} is invalid")
+        _workflows(value["supported_workflows"])
         if value["backend"] not in {"obsidian", "feishu"} or WORKFLOW not in value["supported_workflows"]:
             raise ValueError("Manifest does not support this workflow")
         _no_credentials(value["locator"])
@@ -175,10 +204,17 @@ def validate_common_manifest(value: Any, *, expected: dict[str, Any] | None = No
             for key, child in roots.items():
                 _relative(child, key)
             _relative(value["profile_index_ref"], "profile_index_ref")
+        else:
+            if any(not isinstance(ref, str) or not re.fullmatch(r"[A-Za-z0-9]+", ref)
+                   for ref in (*roots.values(), value["profile_index_ref"])):
+                raise ValueError("Feishu roots and index must be object tokens")
+            if len(set(roots.values())) != len(roots):
+                raise ValueError("Feishu logical roots must be distinct")
         outputs = value["workflow_outputs"]
-        if not isinstance(outputs, dict) or WORKFLOW not in outputs:
+        if not isinstance(outputs, dict) or WORKFLOW not in outputs or set(outputs) - SUPPORTED_WORKFLOWS:
             raise ValueError("Manifest has no Koubo output template")
-        _relative(outputs[WORKFLOW], "workflow output")
+        for template in outputs.values():
+            _relative(template, "workflow output")
         if expected and any(value.get(key) != expected.get(key) for key in ("client_id", "knowledge_base_id", "backend")):
             raise ValueError("Registry and Manifest identities differ")
         return value
@@ -192,6 +228,9 @@ def validate_profile_index(value: Any, *, knowledge_base_id: str) -> dict[str, A
             raise ValueError("Profile index fields are invalid")
         if value["contract_version"] != CONTRACT_VERSION or value["knowledge_base_id"] != knowledge_base_id:
             raise ValueError("Profile index belongs to another knowledge base")
+        if not isinstance(value["knowledge_base_id"], str) or not KNOWLEDGE_BASE_ID.fullmatch(value["knowledge_base_id"]):
+            raise ValueError("Profile index knowledge_base_id is invalid")
+        _revision(value["revision"])
         if not isinstance(value["profiles"], list):
             raise ValueError("profiles must be a list")
         active_primary = 0
@@ -211,6 +250,8 @@ def validate_profile_index(value: Any, *, knowledge_base_id: str) -> dict[str, A
                 raise ValueError("Profile display name is invalid")
             if not isinstance(item["aliases"], list) or any(not isinstance(alias, str) or not alias.strip() for alias in item["aliases"]):
                 raise ValueError("Profile aliases are invalid")
+            if len(item["aliases"]) != len(set(item["aliases"])):
+                raise ValueError("Profile aliases are duplicated")
             if not isinstance(item["object_ref"], str) or not item["object_ref"].strip() or not HEX64.fullmatch(str(item["content_sha256"])):
                 raise ValueError("Profile ref or hash is invalid")
             if item["status"] == "active":
@@ -228,6 +269,10 @@ def validate_profile_index(value: Any, *, knowledge_base_id: str) -> dict[str, A
 
 
 def load_profile_index(path: Path, *, knowledge_base_id: str) -> tuple[dict[str, Any], str]:
+    from .feishu_source import FeishuDocument, remote_json
+    if isinstance(path, FeishuDocument):
+        value, digest = remote_json(path)
+        return validate_profile_index(value, knowledge_base_id=knowledge_base_id), digest
     value, digest = _read_json(path, "SLIM_PROFILE_INVALID")
     return validate_profile_index(value, knowledge_base_id=knowledge_base_id), digest
 

@@ -16,6 +16,7 @@ sys.path.insert(0, str(SKILL_ROOT))
 from runtime.client_registry import (  # noqa: E402
     default_registry_path,
     default_runs_root,
+    load_registry,
     select_client_id,
 )
 from runtime.error_model import SlimRuntimeError  # noqa: E402
@@ -64,6 +65,25 @@ class DefaultClientTests(unittest.TestCase):
         }
         self.assertEqual(select_client_id(registry), "client-one")
         self.assertEqual(select_client_id(registry, "client-one"), "client-one")
+
+    def test_registry_accepts_portable_absolute_vault_example(self) -> None:
+        with self.temporary_root() as directory:
+            registry_path = Path(directory) / "registry.json"
+            registry_path.write_text(
+                json.dumps(
+                    {
+                        "registry_version": "2.0",
+                        "clients": {
+                            "client-one": {
+                                "vault_root": "/private/tmp/client-one",
+                                "manifest_relative_path": "config/manifest.json",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(load_registry(registry_path)["clients"]["client-one"]["vault_root"], "/private/tmp/client-one")
 
     def test_multiple_clients_require_an_explicit_choice(self) -> None:
         registry = {

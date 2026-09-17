@@ -16,7 +16,7 @@ ERROR_CATALOG = {
     ),
     "SLIM_BACKEND_UNSUPPORTED": (
         "当前知识库后端不能由 Content 口播 Slim 直接读取，本次任务尚未开始。",
-        "口播目前只支持 Obsidian；请改选已确认的 Obsidian 知识库。",
+        "请改选已连接口播的 Obsidian 或飞书知识库。",
     ),
     "SLIM_MANIFEST_INVALID": (
         "当前客户的内容配置不完整或不安全，本次任务没有进入内容阶段。",

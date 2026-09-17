@@ -146,6 +146,7 @@ def verify_examples_and_cli() -> None:
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if (
@@ -168,6 +169,7 @@ def verify_no_generated_files() -> None:
 def verify_tests() -> None:
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["PYTHONUTF8"] = "1"
     result = subprocess.run(
         [
             sys.executable,
@@ -182,6 +184,7 @@ def verify_tests() -> None:
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if result.returncode != 0:

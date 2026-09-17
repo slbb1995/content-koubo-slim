@@ -121,7 +121,7 @@ class ContentSourceV1Tests(unittest.TestCase):
             self.assertEqual(frozen_a["profile_id"], primary_id)
             self.assertEqual(frozen_b["profile_id"], other_id)
 
-    def test_common_feishu_binding_fails_closed(self) -> None:
+    def test_invalid_feishu_reference_fails_before_transport(self) -> None:
         with self.temporary_root() as directory:
             root = Path(directory)
             client_id = "CLT-1234567890ABCD"
@@ -152,11 +152,9 @@ class ContentSourceV1Tests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            registry = load_effective_registry(registry_path)
-            selected = select_client_id(registry)
             with self.assertRaises(SlimRuntimeError) as caught:
-                resolve_client(registry, selected)
-            self.assertEqual(caught.exception.error_code, "SLIM_BACKEND_UNSUPPORTED")
+                load_effective_registry(registry_path)
+            self.assertEqual(caught.exception.error_code, "SLIM_REGISTRY_NOT_READABLE")
 
     def test_common_and_legacy_conflict_stops(self) -> None:
         with self.temporary_root() as directory:
