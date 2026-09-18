@@ -27,7 +27,7 @@ def material(root, name='peer.md', *, kind='peer_content_asset', audience='consu
             '---\n\n# 内容组织参考\n\n' + (body or '先说购买后的顾虑，再说明需要了解的服务环节。'))
     path=root/name
     path.write_text(text, encoding='utf-8')
-    return {'relative_path':name,'page_sha256':hashlib.sha256(text.encode()).hexdigest(),
+    return {'relative_path':name,'page_sha256':hashlib.sha256(path.read_bytes()).hexdigest(),
             'reason':'本题关注售后体验，采用顾虑与帮助配对的讲法'}
 
 

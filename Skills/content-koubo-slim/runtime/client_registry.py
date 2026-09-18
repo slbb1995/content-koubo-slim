@@ -6,7 +6,7 @@ import json
 import os
 import re
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from .content_source import (
@@ -53,12 +53,20 @@ def default_runs_root() -> Path:
 
 
 def _safe_relative_path(value: Any) -> PurePosixPath:
-    if not isinstance(value, str) or not value or "\\" in value:
+    if not isinstance(value, str) or not value or "\\" in value or ":" in value:
         raise ValueError("path must be a non-empty POSIX relative path")
+    if any(part in {"", ".", ".."} for part in value.split("/")):
+        raise ValueError("path contains unsafe segments")
     path = PurePosixPath(value)
     if not path.parts or path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
         raise ValueError("path must stay below the configured root")
     return path
+
+
+def _reject_reparse(path: Path) -> None:
+    for item in (path, *path.parents):
+        if item.is_symlink() or (item.exists() and getattr(item.lstat(), "st_file_attributes", 0) & 0x400):
+            raise ValueError("configuration path contains a symlink or reparse point")
 
 
 def load_registry(path: str | Path) -> dict[str, Any]:
@@ -82,8 +90,12 @@ def load_registry(path: str | Path) -> dict[str, Any]:
                 raise ValueError("invalid client id")
             if not isinstance(record, dict) or set(record) != REGISTRY_FIELDS:
                 raise ValueError("registry records may only locate vault and manifest")
-            vault_root = Path(record["vault_root"])
-            if not vault_root.is_absolute():
+            vault_root_value = record["vault_root"]
+            if not isinstance(vault_root_value, str) or not (
+                Path(vault_root_value).is_absolute()
+                or PurePosixPath(vault_root_value).is_absolute()
+                or PureWindowsPath(vault_root_value).is_absolute()
+            ):
                 raise ValueError("vault_root must be supplied as an absolute local path")
             _safe_relative_path(record["manifest_relative_path"])
         return data
@@ -176,20 +188,24 @@ def resolve_client(registry: dict[str, Any], client_id: str) -> ClientLocation:
         try:
             binding = registry["bindings"][client_id]
             backend = binding["backend"]
+            if backend == "feishu":
+                from .feishu_binding import resolve_feishu_binding
+                return resolve_feishu_binding(registry, binding)
             if backend != "obsidian":
-                raise SlimRuntimeError(
-                    "SLIM_BACKEND_UNSUPPORTED",
-                    "client_registry",
-                    detail="Feishu binding cannot be read by Content Koubo Slim",
-                )
+                raise ValueError("unsupported backend")
             vault_root = Path(binding["locator"]["vault_root"])
-            if not vault_root.is_dir() or vault_root.is_symlink():
+            _reject_reparse(vault_root)
+            if not vault_root.is_absolute() or not vault_root.is_dir():
                 raise ValueError("vault root is missing or is a symlink")
             root_resolved = vault_root.resolve(strict=True)
             manifest_relative = _safe_relative_path(binding["manifest_ref"])
             profile_relative = _safe_relative_path(binding["profile_index_ref"])
-            manifest_path = root_resolved.joinpath(*manifest_relative.parts).resolve(strict=True)
-            profile_path = root_resolved.joinpath(*profile_relative.parts).resolve(strict=True)
+            manifest_path = root_resolved.joinpath(*manifest_relative.parts)
+            profile_path = root_resolved.joinpath(*profile_relative.parts)
+            _reject_reparse(manifest_path)
+            _reject_reparse(profile_path)
+            manifest_path = manifest_path.resolve(strict=True)
+            profile_path = profile_path.resolve(strict=True)
             manifest_path.relative_to(root_resolved)
             profile_path.relative_to(root_resolved)
             if manifest_path.is_symlink() or not manifest_path.is_file() or profile_path.is_symlink() or not profile_path.is_file():

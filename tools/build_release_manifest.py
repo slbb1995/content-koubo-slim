@@ -82,22 +82,20 @@ def main() -> int:
     }
     manifest["source"] = {"repository": "https://github.com/slbb1995/content-koubo-slim"}
     manifest["integrity"] = {"hash_algorithm": "sha256"}
-    manifest_path.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    with manifest_path.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     checksum_paths = [
         *(ROOT / item["path"] for item in files),
         ROOT / "VERSION",
         manifest_path,
     ]
-    (ROOT / "SHA256SUMS").write_text(
-        "".join(
-            f"{sha256(path)}  {path.relative_to(ROOT).as_posix()}\n"
-            for path in checksum_paths
-        ),
-        encoding="utf-8",
-    )
+    with (ROOT / "SHA256SUMS").open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(
+            "".join(
+                f"{sha256(path)}  {path.relative_to(ROOT).as_posix()}\n"
+                for path in checksum_paths
+            )
+        )
     print(f"Updated {version}: {len(files)} runtime files, tree {tree}")
     return 0
 

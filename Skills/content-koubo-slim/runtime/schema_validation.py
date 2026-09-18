@@ -127,6 +127,10 @@ def _string_list(value: Any, field: str, *, code: str) -> list[str]:
 
 
 def _relative_markdown(value: Any, field: str, *, code: str) -> str:
+    # A remote source reference is never a filesystem path. Membership is
+    # checked by the Feishu reader before fetching the referenced document.
+    if isinstance(value, str) and re.fullmatch(r"feishu:[A-Za-z0-9]+", value):
+        return value
     if not isinstance(value, str) or "\\" in value:
         _fail(code, f"{field} is not a relative POSIX path")
     path = PurePosixPath(value)

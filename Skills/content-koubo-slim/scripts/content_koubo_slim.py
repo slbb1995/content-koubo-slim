@@ -9,8 +9,13 @@ sys.dont_write_bytecode = True
 
 # WorkBuddy may inject sitecustomize/file hooks through PYTHONPATH. Re-exec
 # before importing the filesystem runtime; stdlib-only runtime needs no site.
-if __name__ == "__main__" and not (sys.flags.isolated and sys.flags.no_site):
-    os.execv(sys.executable, [sys.executable, "-I", "-S", "-B", __file__, *sys.argv[1:]])
+if __name__ == "__main__" and not (sys.flags.isolated and sys.flags.no_site and sys.flags.utf8_mode):
+    command = [sys.executable, "-I", "-S", "-X", "utf8", "-B", __file__, *sys.argv[1:]]
+    if os.name == "nt":
+        # Windows execv does not relay the replacement process's exit status.
+        import subprocess
+        raise SystemExit(subprocess.call(command))
+    os.execv(sys.executable, command)
 
 import argparse
 import json
@@ -73,7 +78,7 @@ from runtime.vault_search import (search_knowledge_assets, search_method_assets,
 
 DRAFT_CHOICES = ("确认正文", "需要修改")
 PACKAGE_CHOICES = ("确认并保存", "需要修改")
-DECISION_TRAILING_PUNCTUATION = "。．，、！!？?"
+DECISION_TRAILING_PUNCTUATION = "。．.，,、！!？?"
 CURRENT_STATE_ACTIONS = {
     "started": "先完成方向生成并展示 Gate A。",
     "direction_pending": "请选择认可整版方向、需要修改或不采用；修改时请给出具体意见。",
@@ -408,6 +413,8 @@ def prepare_direction_stage(
         frozen_input["planning_guidance"] = guidance
     if batch_item is not None:
         frozen_input["batch_item"] = batch_item
+    if location.backend_type == "feishu":
+        frozen_input["backend_type"] = "feishu"
     store.freeze_task_input(task_key, frozen_input)
     analyzer_input = validate_analyzer_input(
         {
@@ -1529,7 +1536,7 @@ def _save_approved_package(
             manifest=manifest,
         )
         output_root = resolve_asset_root(location.vault_root, manifest, "output")
-        saved_pair = save_markdown_pair(
+        save_arguments = dict(
             output_root=output_root,
             output_template=manifest.output_template,
             client_id=frozen.get("profile_id") or frozen["client_id"],
@@ -1539,9 +1546,16 @@ def _save_approved_package(
             draft_version=approved_draft["draft_version"],
             item_suffix=save_suffix(frozen.get("batch_item")),
         )
+        # Each saved revision owns its own receipt; never reuse a previous draft's acknowledgement.
+        revision_dir = f"v{approved_draft['draft_version']}"
+        if location.backend_type == "feishu":
+            from runtime.feishu_save import save_feishu_pair
+            saved = save_feishu_pair(**save_arguments, receipt_dir=store.run_directory(task_key) / "feishu-save" / revision_dir)
+        else:
+            saved = save_markdown_pair(**save_arguments, receipt_dir=store.run_directory(task_key) / "local-save" / revision_dir)
         if frozen.get("batch_item") is not None:
             store.write_fixed_json(task_key, f"saved_pair_v{approved_draft['draft_version']}.json",
-                {key: str(value) if isinstance(value, Path) else value for key, value in saved_pair.items()})
+                {key: str(value) if isinstance(value, Path) else value for key, value in saved.items()})
         store.transition(task_key, "saved")
     except SlimRuntimeError as exc:
         current = store.get_task(task_key)
@@ -1561,12 +1575,14 @@ def _save_approved_package(
         "status_label": "已完成",
         "workflow_stage": "已完成",
         "message": "纯口播稿和配套文案已同时保存；本次任务保持未发布。",
-        "next_action": "P5 到此停止，等待独立 Review。",
+        "next_action": "P5 到此停止；本次内容尚未发布。",
         "run_exists": True,
         "run_created_now": False,
         "artifacts_exist": True,
         "artifacts_preserved": True,
         "publish_status": "not_requested",
+        **({"oral_ref": saved["oral_ref"], "package_ref": saved["package_ref"]}
+           if location.backend_type == "feishu" else {}),
     }
 
 
@@ -1585,8 +1601,8 @@ def respond_package(
     state = store.get_task(task_key)
     decision = _normalize_decision(decision)
     if (
-        state["state"] == "blocked"
-        and state.get("blocked_resume_state") == "package_approved"
+        (state["state"] == "package_approved"
+         or (state["state"] == "blocked" and state.get("blocked_resume_state") == "package_approved"))
         and decision == "确认并保存"
     ):
         if feedback or selected_cover_title or selected_publish_title:
@@ -1599,7 +1615,8 @@ def respond_package(
                 artifacts_exist=True,
                 artifacts_preserved=True,
             )
-        store.transition(task_key, "package_approved")
+        if state["state"] == "blocked":
+            store.transition(task_key, "package_approved")
         return _save_approved_package(
             registry_path=registry_path,
             runs_root=runs_root,
@@ -1747,12 +1764,16 @@ def _discover_methods(args: argparse.Namespace) -> dict[str, Any]:
         raise SlimRuntimeError("SLIM_MANIFEST_INVALID", "content_koubo_slim", detail="binding differs from Manifest")
     root = resolve_asset_root(location.vault_root, manifest, "method")
     if args.read_path:
-        if not args.expected_sha256 or not re.fullmatch(r"[0-9a-f]{64}", args.expected_sha256):
+        # Feishu title discovery does not fetch bodies. Its first explicit read
+        # returns the body hash; selection/start must supply that frozen hash.
+        if (args.expected_sha256 is None and location.backend_type != "feishu") or (
+            args.expected_sha256 is not None and not re.fullmatch(r"[0-9a-f]{64}", args.expected_sha256)
+        ):
             raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "content_koubo_slim", detail="read requires discovered snapshot hash")
         asset = read_method_asset(root, args.read_path, expected_sha256=args.expected_sha256, include_guidance=True)
         if not method_is_usable(asset, args.audience_scope, args.allow_experimental):
             raise SlimRuntimeError("SLIM_METHOD_ASSET_INVALID", "content_koubo_slim", detail="material is excluded for this audience or usage scope")
-        return {"wrote": False, "asset_id": asset.asset_id, "method_kind": method_kind(asset),
+        return {"wrote": False, "relative_path": asset.relative_path, "asset_id": asset.asset_id, "method_kind": method_kind(asset),
                 "page_sha256": asset.page_sha256, "source_metadata": method_source_metadata(asset),
                 "content": complete_method_text(asset)}
     return discover_method_assets(root, offset=args.offset, limit=args.limit,
@@ -1798,6 +1819,37 @@ def _configure(args: argparse.Namespace) -> dict[str, Any]:
         "preview": plan["preview"],
         "confirmation": plan["confirmation"],
     }
+
+
+def _configure_feishu(args: argparse.Namespace) -> dict[str, Any]:
+    from runtime.feishu_configuration import plan_feishu_configuration, apply_feishu_configuration
+    arguments = dict(registry_path=args.registry, binding_id=args.binding_id, profile=args.profile)
+    if args.confirmation:
+        return apply_feishu_configuration(**arguments, confirmation=args.confirmation)
+    plan = plan_feishu_configuration(**arguments)
+    return dict(status="confirmation_required", preview=plan["preview"], confirmation=plan["confirmation"],
+                message="飞书口播连接预览已生成，当前零写入。")
+
+
+def _preflight(args: argparse.Namespace) -> dict[str, Any]:
+    registry = load_effective_registry(args.registry)
+    binding = select_client_id(registry, args.client_id, requested_binding_id=args.binding_id)
+    location = resolve_client(registry, binding)
+    manifest = load_manifest(location.manifest_path, expected_client_id=location.client_id)
+    mode = resolve_speaker_mode(args.speaker_mode, manifest)
+    selected = None
+    if mode == "personal_ip":
+        profile_root = resolve_asset_root(location.vault_root, manifest, "profile")
+        if location.common_contract:
+            index, _ = load_profile_index(location.profile_index_path, knowledge_base_id=manifest.knowledge_base_id)
+            selected = select_profile(index, requested=args.profile, configured_default=location.default_profile_id)
+            read_selected_profile(profile_root, selected)
+        else:
+            read_primary_profile(profile_root, manifest.profile_selector)
+    return dict(status="ready", workflow_stage="启动前校验已通过", backend=location.backend_type,
+                profile=selected["display_name"] if selected else None,
+                run_exists=False, run_created_now=False, artifacts_exist=False, wrote=False,
+                message="知识库和讲述者已验证；开始内容任务仍需 1—5 篇参考。")
 
 
 def _record_direction(args: argparse.Namespace) -> dict[str, Any]:
@@ -2067,6 +2119,20 @@ def build_parser() -> argparse.ArgumentParser:
     discovery.add_argument("--read-path")
     discovery.add_argument("--expected-sha256")
     discovery.set_defaults(handler=_discover_methods)
+    configure_feishu = subparsers.add_parser("configure-feishu", help="preview or apply Koubo support to an existing Feishu binding")
+    configure_feishu.add_argument("--registry")
+    configure_feishu.add_argument("--binding-id", required=True)
+    configure_feishu.add_argument("--profile")
+    configure_feishu.add_argument("--confirmation")
+    configure_feishu.set_defaults(handler=_configure_feishu)
+
+    preflight = subparsers.add_parser("preflight", help="read-only source and Profile validation; no Run or content")
+    _add_registry_argument(preflight)
+    preflight.add_argument("--binding-id")
+    preflight.add_argument("--client-id")
+    preflight.add_argument("--profile")
+    preflight.add_argument("--speaker-mode", choices=("personal_ip", "company_brand", "neutral"))
+    preflight.set_defaults(handler=_preflight)
 
     start = subparsers.add_parser("start", help="prepare one Run through Analyzer input")
     _add_registry_argument(start)
@@ -2214,7 +2280,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(remaining)
     try:
         response = args.handler(args)
-        exit_code = 0
+        exit_code = 2 if response.get("status") == "blocked" else 0
     except SlimRuntimeError as exc:
         response = exc.user_response()
         exit_code = 2

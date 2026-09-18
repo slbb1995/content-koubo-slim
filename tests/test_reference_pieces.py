@@ -71,10 +71,18 @@ class ReferencePiecesTests(unittest.TestCase):
         p['excluded_ranges'].append({'start_line': 6, 'end_line': 21, 'reason': '本次未选择这些篇目'})
         with self.assertRaises(SlimRuntimeError): self.prepare(p, [self.source])
 
-    def test_symlink_and_unknown_map_fields_are_rejected(self):
-        link = self.root/'linked.md'; link.symlink_to(self.source)
+    def test_symlink_is_rejected(self):
+        link = self.root/'linked.md'
+        try:
+            link.symlink_to(self.source)
+        except OSError as exc:
+            if getattr(exc, 'winerror', None) == 1314:
+                self.skipTest('Windows account lacks symbolic-link creation privilege')
+            raise
         p = copy.deepcopy(self.plan); p['source_path'] = str(link)
         with self.assertRaises(SlimRuntimeError): self.prepare(p)
+
+    def test_unknown_map_fields_are_rejected(self):
         p = copy.deepcopy(self.plan); p['items'][0]['content'] = '替换原文'
         with self.assertRaises(SlimRuntimeError): self.prepare(p)
 
@@ -82,7 +90,7 @@ class ReferencePiecesTests(unittest.TestCase):
         refs = preflight_references([self.source])
         self.assertEqual(len(refs), 1)
         self.assertNotIn('source_lines', refs[0].private_index_item())
-        self.assertEqual(refs[0].content, self.raw.decode().strip())
+        self.assertEqual(refs[0].content, self.raw.decode().replace('\r\n', '\n').strip())
 
 
 class DraftDeliveryTests(unittest.TestCase):

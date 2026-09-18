@@ -143,11 +143,28 @@ def _verified_pair(store, key):
     version, _, _ = store.latest_version(key, "draft")
     receipt = store.read_fixed_json(key, f"saved_pair_v{version}.json")
     frozen = store.read_task_input(key)
+    if frozen.get("backend_type") == "feishu":
+        from .feishu_binding import space_from_binding
+        from .feishu_source import FeishuDocument
+        from .feishu_save import verify_saved_feishu_pair
+        space = space_from_binding({"locator": {"knowledge_base_ref": frozen["vault_root_resolved"]}})
+        manifest = load_manifest(FeishuDocument(space, frozen["manifest_path_resolved"]), expected_client_id=frozen["client_id"])
+        if manifest.manifest_sha256 != frozen.get("manifest_sha256"):
+            return False
+        return verify_saved_feishu_pair(
+            output_root=resolve_asset_root(space, manifest, "output"),
+            output_template=manifest.output_template,
+            receipt_dir=store.run_directory(key) / "feishu-save" / f"v{version}",
+            expected_result=receipt, draft_version=version,
+            item_suffix=save_suffix(frozen.get("batch_item")))
+    from .client_registry import _reject_reparse
+    _reject_reparse(Path(frozen["vault_root_resolved"]))
     vault = Path(frozen["vault_root_resolved"]).resolve(strict=True)
     manifest = load_manifest(Path(frozen["manifest_path_resolved"]), expected_client_id=frozen["client_id"])
     authorized = resolve_asset_root(vault, manifest, "output").resolve(strict=True)
     for kind in ("oral", "package"):
         path = Path(receipt[f"{kind}_path"])
+        _reject_reparse(path)
         if not path.is_absolute() or ".." in path.parts or path.is_symlink() or not path.is_file():
             return False
         if authorized not in path.parents:

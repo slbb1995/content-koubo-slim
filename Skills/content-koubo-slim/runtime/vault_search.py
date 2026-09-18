@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .error_model import SlimRuntimeError
+from .feishu_source import FeishuRoot, iter_documents
 from .vault_reader import (
     MethodAsset,
     read_knowledge_asset,
@@ -55,12 +56,21 @@ def method_source_metadata(asset: MethodAsset) -> dict[str, Any]:
         "source_id", "source_section") if key in asset.metadata}
 
 
-def discover_method_assets(method_root: str | Path, *, offset: int = 0, limit: int = 40,
+def discover_method_assets(method_root: str | Path | FeishuRoot, *, offset: int = 0, limit: int = 40,
                            audience_scope: str | None = None, allow_experimental: bool = False) -> dict[str, Any]:
     """Page metadata for Agent semantic selection; does not create a Run or choose a structure."""
     if offset < 0 or not 1 <= limit <= 50:
         raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "vault_search", detail="invalid discovery page")
     root = safe_method_root(method_root)
+    if isinstance(root, FeishuRoot):
+        # Remote discovery enumerates bounded titles only. Explicit read-path
+        # requests fetch selected bodies; never scan all remote bodies for metadata.
+        documents = list(iter_documents(root))
+        items = [{"relative_path": "feishu:" + item.token, "title": item.title,
+                  "metadata_only": True, "requires_read_path": True} for item in documents]
+        return {"items": items[offset:offset+limit], "total": len(items),
+                "next_offset": offset+limit if offset+limit < len(items) else None,
+                "excluded": [], "excluded_total": 0, "wrote": False}
     items, excluded, ids = [], [], set()
     for path in sorted(root.rglob("*.md")):
         relative = path.relative_to(root).as_posix()
@@ -88,7 +98,7 @@ def discover_method_assets(method_root: str | Path, *, offset: int = 0, limit: i
             "excluded": excluded[offset:offset+limit], "excluded_total": len(excluded), "wrote": False}
 
 
-def select_method_assets(method_root: str | Path, selections: list[dict[str, Any]], *,
+def select_method_assets(method_root: str | Path | FeishuRoot, selections: list[dict[str, Any]], *,
                          audience_scope: str | None = None, allow_experimental: bool = False) -> list[dict[str, Any]]:
     """Validate the Agent's semantic choice against real paths, bytes, roles and budget."""
     if not isinstance(selections, list) or len(selections) > 5:
@@ -115,6 +125,7 @@ def select_method_assets(method_root: str | Path, selections: list[dict[str, Any
                            "使用范围："+str(asset.metadata.get("usage_scope", "method_reference_only")),
                            "来源核验："+str(asset.metadata.get("source_verification", "not_declared"))]})
     return result
+REMOTE_BODY_CANDIDATE_LIMIT = 12
 STOP_TERMS = {
     "一个", "这个", "怎样", "怎么", "什么", "是否", "到底", "可以", "内容", "口播",
     "边界", "资料", "当前", "可核验", "公开使用", "表达边界", "产品或", "具体",
@@ -197,7 +208,7 @@ def _excerpt(asset: MethodAsset, terms: tuple[str, ...], limit: int = 1200) -> s
 
 
 def search_method_assets(
-    method_root: str | Path,
+    method_root: str | Path | FeishuRoot,
     *,
     query: str,
     audience_scope: str | None = None,
@@ -215,12 +226,11 @@ def search_method_assets(
         role: [] for role in ROLE_LIMITS
     }
     seen_ids: set[str] = set()
-    for candidate_path in sorted(root.rglob("*.md")):
-        relative = candidate_path.relative_to(root).as_posix()
+    for relative in _candidate_refs(root, query):
         try:
             asset = read_method_asset(root, relative)
         except SlimRuntimeError as exc:
-            if "symlink" in exc.detail.casefold():
+            if (isinstance(root, FeishuRoot) and exc.component != 'vault_reader') or "symlink" in exc.detail.casefold():
                 raise
             continue
         if asset.asset_id in seen_ids:
@@ -346,7 +356,7 @@ def _knowledge_score(asset: Any, needs: list[str]) -> tuple[int, list[str]]:
 
 
 def search_knowledge_assets(
-    knowledge_root: str | Path, *, needs: list[str]
+    knowledge_root: str | Path | FeishuRoot, *, needs: list[str]
 ) -> list[dict[str, Any]]:
     """Return at most five relevant local excerpts from one authorized 03 root."""
 
@@ -366,12 +376,11 @@ def search_knowledge_assets(
         return []
     root = safe_knowledge_root(knowledge_root)
     ranked: list[tuple[int, str, Any, list[str]]] = []
-    for candidate_path in sorted(root.rglob("*.md")):
-        relative = candidate_path.relative_to(root).as_posix()
+    for relative in _candidate_refs(root, '\n'.join(needs)):
         try:
             asset = read_knowledge_asset(root, relative)
         except SlimRuntimeError as exc:
-            if "symlink" in exc.detail.casefold():
+            if (isinstance(root, FeishuRoot) and exc.component != 'vault_reader') or "symlink" in exc.detail.casefold():
                 raise
             continue
         if _is_index_page_title(asset.title):
@@ -401,3 +410,21 @@ def search_knowledge_assets(
             }
         )
     return output
+
+
+def _candidate_refs(root: Path | FeishuRoot, query: str):
+    if isinstance(root, FeishuRoot):
+        # Fully validate the bounded metadata enumeration before reading bodies.
+        # No title evidence means no candidate: never fall back to a body scan.
+        terms = _query_terms(query)
+        ranked = []
+        for document in iter_documents(root):
+            title = re.sub(r'\s+', '', (document.title or '').casefold())
+            score = sum(len(term) for term in terms if term in title)
+            if score:
+                ranked.append((score, document.token))
+        for _, token in sorted(ranked, key=lambda item: (-item[0], item[1]))[:REMOTE_BODY_CANDIDATE_LIMIT]:
+            yield 'feishu:' + token
+    else:
+        for path in sorted(root.rglob('*.md')):
+            yield path.relative_to(root).as_posix()

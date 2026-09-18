@@ -12,6 +12,13 @@ from typing import Any
 from .error_model import SlimRuntimeError
 
 
+def _reject_reparse(path: Path) -> None:
+    """Check the supplied spelling before resolve can hide a symlink/junction."""
+    for item in (path, *path.parents):
+        if item.is_symlink() or (item.exists() and getattr(item.lstat(), "st_file_attributes", 0) & 0x400):
+            _fail("save path contains a symlink or reparse point")
+
+
 def _fail(detail: str) -> None:
     raise SlimRuntimeError(
         "SLIM_SAVE_FAILED",
@@ -38,6 +45,8 @@ def _render_template(template: str, client_id: str, now: datetime) -> PurePosixP
     )
     if "{" in rendered or "}" in rendered:
         _fail("output template contains an unsupported placeholder")
+    if ":" in rendered or any(part in {"", ".", ".."} for part in rendered.split("/")):
+        _fail("output template contains unsafe path segments")
     relative = PurePosixPath(rendered)
     if (
         relative.is_absolute()
@@ -52,10 +61,12 @@ def _safe_directory(output_root: Path, relative: PurePosixPath) -> Path:
     try:
         if not output_root.is_absolute() or output_root.is_symlink() or not output_root.is_dir():
             raise ValueError("output root must be an existing real directory")
+        _reject_reparse(output_root)
         root = output_root.resolve(strict=True)
         current = root
         for part in relative.parts:
             candidate = current / part
+            _reject_reparse(candidate)
             candidate.mkdir(exist_ok=True)
             if candidate.is_symlink() or not candidate.is_dir():
                 raise ValueError("output template contains a symlink or non-directory")
@@ -76,30 +87,32 @@ def _filename_stem(publish_title: str) -> str:
     return stem[:60].rstrip(" .")
 
 
-def _write_pair(targets: tuple[tuple[Path, bytes], tuple[Path, bytes]], *, resume_identical: bool = False) -> None:
-    existing = set()
-    for path, payload in targets:
-        if path.exists() or path.is_symlink():
-            if not resume_identical or path.is_symlink() or not path.is_file() or path.read_bytes() != payload:
-                _fail("one or both target files already exist with unverified content")
-            existing.add(path)
-    created: list[Path] = []
+def _write_pair(targets: tuple[tuple[Path, bytes], tuple[Path, bytes]]) -> None:
+    if any(path.exists() or path.is_symlink() for path, _ in targets):
+        _fail("one or both target files already exist")
+    created: list[tuple[Path, tuple[int, int]]] = []
     try:
         for path, payload in targets:
-            if path in existing:
-                continue
             with path.open("xb") as handle:
-                handle.write(payload)
+                stat = os.fstat(handle.fileno())
+                # Own the file immediately after exclusive create, before any
+                # operation that can fail. Never clean up a replacement inode.
+                created.append((path, (stat.st_dev, stat.st_ino)))
+                if handle.write(payload) != len(payload):
+                    raise OSError("short output write")
                 handle.flush()
                 os.fsync(handle.fileno())
-            created.append(path)
         for path, payload in targets:
             if path.is_symlink() or path.read_bytes() != payload:
                 raise OSError(f"saved file did not read back exactly: {path.name}")
     except OSError as exc:
-        for path in created:
+        for path, identity in reversed(created):
             try:
-                path.unlink(missing_ok=True)
+                _reject_reparse(path)
+                if path.exists():
+                    stat = path.stat()
+                    if (stat.st_dev, stat.st_ino) == identity:
+                        path.unlink()
             except OSError:
                 pass
         _fail(str(exc))
@@ -116,6 +129,7 @@ def save_markdown_pair(
     now: datetime | None = None,
     draft_version: int = 1,
     item_suffix: str | None = None,
+    receipt_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Save both final Markdown files or leave neither final file behind."""
 
@@ -123,24 +137,29 @@ def save_markdown_pair(
         _fail("approved oral body is empty")
     if not isinstance(package_markdown, str) or not package_markdown.strip():
         _fail("approved package Markdown is empty")
+    if receipt_dir is not None:
+        from .local_save_receipt import save_with_receipt
+        return save_with_receipt(output_root=output_root, output_template=output_template,
+            client_id=client_id, selected_publish_title=selected_publish_title,
+            oral_body=oral_body, package_markdown=package_markdown,
+            now=now, receipt_dir=receipt_dir, draft_version=draft_version, item_suffix=item_suffix)
     timestamp = now or datetime.now().astimezone()
     relative_dir = _render_template(output_template, client_id, timestamp)
-    root = Path(output_root).resolve(strict=True)
+    root = Path(output_root)
+    if not root.is_absolute():
+        _fail("output root must be absolute")
+    _reject_reparse(root)
+    try:
+        root = root.resolve(strict=True)
+    except OSError as exc:
+        _fail(str(exc))
     target_dir = _safe_directory(root, relative_dir)
-    if type(draft_version) is not int or draft_version < 1:
-        _fail("draft version must be a positive integer")
-    stem = _filename_stem(selected_publish_title)
-    if item_suffix is not None:
-        if not isinstance(item_suffix, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,39}-[0-9a-f]{32}", item_suffix):
-            _fail("batch item filename suffix is invalid")
-        stem = stem[:40].rstrip(" .") + f"-{item_suffix}"
-    if draft_version > 1:
-        stem += f"-第{draft_version}版"
+    stem = _versioned_stem(selected_publish_title, draft_version, item_suffix)
     oral_path = target_dir / f"{stem}-口播稿.md"
     package_path = target_dir / f"{stem}-配套文案.md"
     oral_bytes = (oral_body + "\n").encode("utf-8")
     package_bytes = (package_markdown.rstrip() + "\n").encode("utf-8")
-    _write_pair(((oral_path, oral_bytes), (package_path, package_bytes)), resume_identical=item_suffix is not None)
+    _write_pair(((oral_path, oral_bytes), (package_path, package_bytes)))
     return {
         "oral_path": oral_path,
         "package_path": package_path,
@@ -150,3 +169,17 @@ def save_markdown_pair(
         "package_sha256": hashlib.sha256(package_bytes).hexdigest(),
         "publish_status": "not_requested",
     }
+
+
+def _versioned_stem(title: str, draft_version: int = 1, item_suffix: str | None = None) -> str:
+    """One naming rule for local output, remote output and receipt verification."""
+    if type(draft_version) is not int or draft_version < 1:
+        _fail("draft version must be a positive integer")
+    stem = _filename_stem(title)
+    if item_suffix is not None:
+        if not isinstance(item_suffix, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,39}-[0-9a-f]{32}", item_suffix):
+            _fail("batch item filename suffix is invalid")
+        stem = stem[:40].rstrip(" .") + f"-{item_suffix}"
+    if draft_version > 1:
+        stem += f"-第{draft_version}版"
+    return stem

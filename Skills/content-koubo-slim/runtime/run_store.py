@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
 import re
 import secrets
+import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -267,17 +267,55 @@ class RunStore:
         try:
             descriptor = os.open(lock_path, flags, 0o600)
             with os.fdopen(descriptor, "a+b") as handle:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                self._lock_file(handle)
                 try:
                     yield root
                 finally:
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                    self._unlock_file(handle)
         except SlimRuntimeError:
             raise
         except OSError as exc:
             raise SlimRuntimeError(
                 "SLIM_RUN_STORE_INVALID", "run_store", detail=str(exc)
             ) from exc
+
+    @staticmethod
+    def _lock_file(handle: Any) -> None:
+        """Acquire one cross-process lock byte without a third-party dependency."""
+
+        if os.name == "nt":
+            import msvcrt
+
+            handle.seek(0)
+            if os.fstat(handle.fileno()).st_size == 0:
+                handle.seek(0)
+                handle.write(b"\0")
+                handle.flush()
+                os.fsync(handle.fileno())
+            handle.seek(0)
+            while True:
+                try:
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    return
+                except OSError:
+                    time.sleep(0.05)
+
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+
+    @staticmethod
+    def _unlock_file(handle: Any) -> None:
+        if os.name == "nt":
+            import msvcrt
+
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            return
+
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     @staticmethod
     def _read_json(
