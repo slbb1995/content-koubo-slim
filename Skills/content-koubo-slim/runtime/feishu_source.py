@@ -151,7 +151,8 @@ def remote_json(document: FeishuDocument) -> tuple[dict[str, Any], str]:
     digest = hashlib.sha256(text.encode('utf-8')).hexdigest()
     if document.expected_sha256 is not None and document.expected_sha256 != digest:
         _fail('Feishu JSON configuration changed after its verified binding')
-    payload = text.strip()
+    from .feishu_client import strip_native_title
+    payload = strip_native_title(text).strip()
     while re.match(r'^#{1,6}\s+[^\n]+(?:\n|$)', payload):
         payload = re.sub(r'^#{1,6}\s+[^\n]+(?:\n|$)', '', payload, count=1).lstrip()
     if payload.startswith('```'):

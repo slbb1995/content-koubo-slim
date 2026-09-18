@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import html
+from pathlib import Path
 import os
 import re
 import shutil
@@ -14,17 +16,61 @@ MAX_NODES = 5000
 
 
 def _lark_command(binary, arguments, *, platform=None):
-    """Build a process command without asking Windows to open a launcher file."""
+    """Use executable argv only, including Windows npm installations.
+
+    list2cmdline is not cmd.exe escaping. Never pass user titles through a
+    batch shell: resolve a sibling native CLI or the official npm Node entry.
+    """
     if (platform or os.name) == 'nt' and binary.lower().endswith(('.cmd', '.bat')):
-        command = subprocess.list2cmdline([binary, *arguments])
-        comspec = os.environ.get('ComSpec', r'C:\\Windows\\System32\\cmd.exe')
-        return [comspec, '/d', '/s', '/c', command]
+        shim = Path(binary)
+        native = shim.with_suffix('.exe')
+        if native.is_file():
+            return [str(native), *arguments]
+        roots = [shim.parent / 'node_modules' / '@larksuite' / 'cli']
+        if shim.parent.name == '.bin':
+            roots.append(shim.parent.parent / '@larksuite' / 'cli')
+        for root in roots:
+            try:
+                package = json.loads((root / 'package.json').read_text(encoding='utf-8'))
+                entry = root / 'scripts' / 'run.js'
+                if (not isinstance(package, dict) or package.get('name') != '@larksuite/cli'
+                        or package.get('bin', {}).get('lark-cli') != 'scripts/run.js'
+                        or not entry.is_file()):
+                    continue
+                node = shim.parent / 'node.exe'
+                executable = str(node) if node.is_file() else shutil.which('node.exe') or shutil.which('node')
+                if executable and executable.lower().endswith('.exe'):
+                    return [executable, str(entry), *arguments]
+            except (OSError, ValueError, AttributeError):
+                continue
+        raise ValueError('Cannot resolve lark-cli batch launcher to a native executable or official Node entry; no command executed')
     return [binary, *arguments]
 
 
 def canonical_markdown(body: str) -> str:
     """Normalize transport newlines only; retain Markdown escapes and spaces."""
     return body.replace('\r\n', '\n').replace('\r', '\n').rstrip('\n') + '\n'
+
+
+def strip_native_title(text: str, expected_title: str | None = None) -> str:
+    """Unwrap exactly one transport title; never scan or strip body elements."""
+    match = re.match(r'\A<title>([^<\r\n]*)</title>\n(?:[ \t]*\n)*', text)
+    if not match:
+        return text
+    if expected_title is not None and html.unescape(match.group(1)) != expected_title:
+        raise _error('Exported document title differs from the verified Wiki title')
+    return text[match.end():]
+
+
+def document_body_variants(text: str, title: str) -> set[str]:
+    """Exact readback alternatives for plain, native-title and H1 exports."""
+    actual = canonical_markdown(text)
+    body = strip_native_title(actual, title)
+    variants = {actual, canonical_markdown(body)}
+    prefix = '# ' + title + '\n\n'
+    if body.startswith(prefix):
+        variants.add(canonical_markdown(body[len(prefix):]))
+    return variants
 
 
 def _error(detail, *, writing=False):

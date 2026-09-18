@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .error_model import SlimRuntimeError
-from .feishu_client import canonical_markdown
+from .feishu_client import canonical_markdown, document_body_variants
 from .vault_save import _versioned_stem, _render_template
 
 if TYPE_CHECKING:
@@ -149,7 +149,7 @@ def save_feishu_pair(*, output_root: FeishuRoot, output_template, client_id,
             if entry['status'] != 'reused':
                 actual = canonical_markdown(client.fetch_markdown(node['obj_token']))
                 # CLI versions may include the document title in their Markdown.
-                if actual not in (canonical_markdown(body), canonical_markdown('# ' + title + '\n\n' + body)):
+                if canonical_markdown(body) not in document_body_variants(actual, title):
                     _fail('Remote Markdown readback does not match approved content')
                 entry['status'] = 'verified'
             entry['refs'] = node
@@ -237,10 +237,7 @@ def verify_saved_feishu_pair(*, output_root, output_template, receipt_dir,
         if len(matches) != 1 or matches[0].get('node_token') != node['node_token']:
             return False
         actual = canonical_markdown(client.fetch_markdown(node['obj_token']))
-        body_hashes = {_sha(actual)}
-        prefix = '# ' + title + '\n\n'
-        if actual.startswith(prefix):
-            body_hashes.add(_sha(canonical_markdown(actual[len(prefix):])))
+        body_hashes = {_sha(body) for body in document_body_variants(actual, title)}
         if expected_result[kind + '_sha256'] != request['sha'][index] or request['sha'][index] not in body_hashes:
             return False
     return (expected_result['oral_ref'] != expected_result['package_ref']
