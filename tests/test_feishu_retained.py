@@ -1,13 +1,14 @@
 """Offline backend contract tests, never a claim of live Feishu acceptance."""
 from pathlib import Path
 from types import SimpleNamespace
-import json,sys,tempfile,unittest
+import json,os,subprocess,sys,tempfile,unittest
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'Skills/content-koubo-slim'))
 from runtime.feishu_source import FeishuSpace,FeishuRoot,assert_below
 from runtime.feishu_save import save_feishu_pair
 from runtime.feishu_binding import resolve_feishu_binding
+from runtime.feishu_client import _lark_command
 from runtime.error_model import SlimRuntimeError
 
 class FakeClient:
@@ -73,5 +74,19 @@ class FeishuRetainedTests(unittest.TestCase):
         with self.assertRaises(SlimRuntimeError): assert_below(self.space,'content','content')
         self.client.nodes['content']['space_id']='123'; self.client.nodes['content']['node_type']='shortcut'
         with self.assertRaises(SlimRuntimeError): assert_below(self.space,'content','content')
+
+    def test_windows_cmd_transport_uses_comspec(self):
+        binary=r'C:\\Tools\\lark-cli.cmd'
+        arguments=['wiki','+node-list','--space-id','123']
+        comspec=r'C:\\Windows\\System32\\cmd.exe'
+        with patch.dict(os.environ,{'ComSpec':comspec}):
+            command=_lark_command(binary,arguments,platform='nt')
+        self.assertEqual(command[:4],[comspec,'/d','/s','/c'])
+        self.assertEqual(command[4],subprocess.list2cmdline([binary,*arguments]))
+
+    def test_non_windows_transport_executes_binary_directly(self):
+        self.assertEqual(
+            _lark_command('/usr/local/bin/lark-cli',['wiki','+node-list'],platform='posix'),
+            ['/usr/local/bin/lark-cli','wiki','+node-list'])
 
 if __name__=='__main__': unittest.main()

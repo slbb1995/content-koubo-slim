@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -10,6 +11,15 @@ from .error_model import SlimRuntimeError
 
 MAX_PAGES = 100
 MAX_NODES = 5000
+
+
+def _lark_command(binary, arguments, *, platform=None):
+    """Build a process command without asking Windows to open a launcher file."""
+    if (platform or os.name) == 'nt' and binary.lower().endswith(('.cmd', '.bat')):
+        command = subprocess.list2cmdline([binary, *arguments])
+        comspec = os.environ.get('ComSpec', r'C:\\Windows\\System32\\cmd.exe')
+        return [comspec, '/d', '/s', '/c', command]
+    return [binary, *arguments]
 
 
 def canonical_markdown(body: str) -> str:
@@ -34,7 +44,7 @@ class FeishuClient:
     def _call(self, args, *, body=None, writing=False):
         try:
             completed = subprocess.run(
-                [self.binary, *args, '--as', self.identity, '--format', 'json'],
+                _lark_command(self.binary, [*args, '--as', self.identity, '--format', 'json']),
                 input=body, capture_output=True, text=True, encoding='utf-8',
                 check=False, timeout=120, shell=False)
             output = completed.stdout if completed.returncode == 0 else completed.stderr

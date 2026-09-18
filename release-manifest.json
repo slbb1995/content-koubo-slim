@@ -192,10 +192,10 @@
         "skill": "content-koubo-slim"
       },
       {
-        "bytes": 6370,
+        "bytes": 6846,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/runtime/feishu_client.py",
-        "sha256": "2b642ba97d6fb03a2814206a2c8c6ec7c90547ae3d6de65928a0c725a17e1675",
+        "sha256": "f869878e92473457ba6c2b2b32e3a1aa6f73833fc671ed801fdaeda59a6e7eb6",
         "skill": "content-koubo-slim"
       },
       {
@@ -369,7 +369,7 @@
       "content-koubo-slim",
       "content-koubo-writer"
     ],
-    "tree_sha256": "a501606f45dc9478580c99a60fd06c52f90752892eafb8d5d939caeba27abeaa"
+    "tree_sha256": "1c2c4ffc8346acb390cd96056ff793bcdf53aa4e80f3d0b89c79b2f8973c5f9e"
   },
   "schema_version": "content-koubo-slim-release-v1",
   "source": {
