@@ -10,9 +10,9 @@ sys.dont_write_bytecode = True
 # WorkBuddy may inject sitecustomize/file hooks through PYTHONPATH. Re-exec
 # before importing the filesystem runtime; stdlib-only runtime needs no site.
 if __name__ == "__main__" and not (sys.flags.isolated and sys.flags.no_site and sys.flags.utf8_mode):
-    command = [sys.executable, "-I", "-S", "-B", "-X", "utf8", __file__, *sys.argv[1:]]
+    command = [sys.executable, "-I", "-S", "-X", "utf8", "-B", __file__, *sys.argv[1:]]
     if os.name == "nt":
-        # Windows execv does not preserve the child exit status for callers.
+        # Windows execv does not relay the replacement process's exit status.
         import subprocess
         raise SystemExit(subprocess.call(command))
     os.execv(sys.executable, command)

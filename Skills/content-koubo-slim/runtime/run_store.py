@@ -282,10 +282,13 @@ class RunStore:
     @staticmethod
     def _lock_file(handle: Any) -> None:
         """Acquire one cross-process lock byte without a third-party dependency."""
+
         if os.name == "nt":
             import msvcrt
+
             handle.seek(0)
             if os.fstat(handle.fileno()).st_size == 0:
+                handle.seek(0)
                 handle.write(b"\0")
                 handle.flush()
                 os.fsync(handle.fileno())
@@ -296,17 +299,22 @@ class RunStore:
                     return
                 except OSError:
                     time.sleep(0.05)
+
         import fcntl
+
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
 
     @staticmethod
     def _unlock_file(handle: Any) -> None:
         if os.name == "nt":
             import msvcrt
+
             handle.seek(0)
             msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
             return
+
         import fcntl
+
         fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     @staticmethod
