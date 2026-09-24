@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "content-koubo-publish-pack/input-v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "package_contract_version", "approved_draft", "writing_context",
+    "target_platforms", "platform_rule_versions", "base_package_version",
+    "previous_package", "revision_request", "revision_scope"
+  ],
+  "properties": {
+    "package_contract_version": {"const": "content-koubo-publish-pack-input-v2"},
+    "approved_draft": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["draft_version", "body"],
+      "properties": {
+        "draft_version": {"type": "integer", "minimum": 1},
+        "body": {"type": "string", "minLength": 1}
+      }
+    },
+    "writing_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_audience", "content_goal", "speaker_mode", "voice_guidance", "must_avoid", "fact_boundary"],
+      "properties": {
+        "target_audience": {"type": "string", "minLength": 1},
+        "content_goal": {"enum": ["explain", "discuss", "convert"]},
+        "speaker_mode": {"enum": ["personal_ip", "company_brand", "neutral"]},
+        "voice_guidance": {"type": ["object", "null"]},
+        "must_avoid": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "fact_boundary": {"const": "approved_draft_only"}
+      }
+    },
+    "target_platforms": {
+      "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true,
+      "items": {"enum": ["douyin", "xiaohongshu", "wechat_channels"]}
+    },
+    "platform_rule_versions": {"type": "object"},
+    "base_package_version": {"type": "integer", "minimum": 0},
+    "previous_package": {"type": ["object", "null"]},
+    "revision_request": {"type": ["string", "null"]},
+    "revision_scope": {
+      "type": ["array", "null"], "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^(douyin|xiaohongshu|wechat_channels)\\.(title|publish_copy|tags)$|^cover_texts$"}
+    }
+  }
+}

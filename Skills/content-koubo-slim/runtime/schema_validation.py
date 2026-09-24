@@ -90,6 +90,14 @@ PUBLISH_PACK_RESULT_FIELDS = {
     "publish_copy",
     "tags",
 }
+PUBLISH_PLATFORMS = ("douyin", "xiaohongshu", "wechat_channels")
+PUBLISH_PACK_V2_FIELDS = {
+    "contract_version",
+    "platforms",
+    "cover_texts",
+    "recommended_cover_text",
+}
+PUBLISH_PLATFORM_FIELDS = {"title", "publish_copy", "tags"}
 
 
 def _fail(
@@ -902,13 +910,96 @@ def validate_writer_result(value: Any) -> tuple[dict[str, Any], str]:
     return {"paragraphs": normalized}, body
 
 
-def validate_publish_pack_result(value: Any) -> dict[str, Any]:
-    """Accept the one P5 package object and no body or machine-owned fields."""
+def _validate_publish_tags(value: Any, *, field: str, code: str, exact_five: bool) -> list[str]:
+    tags = _string_list(value, field, code=code)
+    valid_count = len(tags) == 5 if exact_five else 1 <= len(tags) <= 5
+    if not valid_count or any(
+        not tag.startswith("#")
+        or len(tag) < 2
+        or tag.count("#") != 1
+        or any(character.isspace() for character in tag)
+        for tag in tags
+    ):
+        expected = "5" if exact_five else "1 to 5"
+        _fail(code, f"{field} must contain {expected} unique # labels without whitespace", workflow_stage="正在生成配套文案")
+    return tags
+
+
+def validate_publish_pack_result(
+    value: Any, *, target_platforms: Iterable[str] | None = None
+) -> dict[str, Any]:
+    """Accept the legacy v1 package or one platform-grouped v2 package.
+
+    v1 remains readable for existing Runs. New callers pass target_platforms and
+    therefore require v2; no validator path silently projects old content into
+    three platform groups.
+    """
 
     code = "SLIM_PACKAGE_OUTPUT_INVALID"
     stage = "正在生成配套文案"
-    if not isinstance(value, dict) or set(value) != PUBLISH_PACK_RESULT_FIELDS:
-        _fail(code, "publish pack output fields do not match the single contract", workflow_stage=stage)
+    requested = tuple(target_platforms) if target_platforms is not None else None
+    if requested is not None:
+        if (
+            not requested
+            or len(set(requested)) != len(requested)
+            or any(platform not in PUBLISH_PLATFORMS for platform in requested)
+        ):
+            _fail(code, "target platforms are invalid", workflow_stage=stage)
+    if isinstance(value, dict) and set(value) == PUBLISH_PACK_RESULT_FIELDS:
+        if requested is not None:
+            _fail(code, "new platform-targeted packages must use the v2 contract", workflow_stage=stage)
+        return _validate_publish_pack_v1(value, code=code, stage=stage)
+    if not isinstance(value, dict) or set(value) != PUBLISH_PACK_V2_FIELDS:
+        _fail(code, "publish pack output fields do not match a supported contract", workflow_stage=stage)
+    if value.get("contract_version") != "content-koubo-publish-pack-result-v2":
+        _fail(code, "publish pack v2 contract_version is invalid", workflow_stage=stage)
+    platforms = value.get("platforms")
+    if not isinstance(platforms, dict) or not platforms:
+        _fail(code, "publish pack v2 has no platform groups", workflow_stage=stage)
+    actual = tuple(platforms)
+    expected = requested or actual
+    if set(actual) != set(expected) or any(platform not in PUBLISH_PLATFORMS for platform in actual):
+        _fail(code, "platform groups differ from the frozen target platforms", workflow_stage=stage)
+    normalized_platforms: dict[str, dict[str, Any]] = {}
+    for platform in expected:
+        item = platforms[platform]
+        if not isinstance(item, dict) or set(item) != PUBLISH_PLATFORM_FIELDS:
+            _fail(code, f"{platform} fields are invalid", workflow_stage=stage)
+        title = _nonempty(item["title"], f"{platform}.title", code=code)
+        publish_copy = _nonempty(item["publish_copy"], f"{platform}.publish_copy", code=code)
+        if "\n" in title or "\x00" in title or "\x00" in publish_copy:
+            _fail(code, f"{platform} contains unsafe title or copy text", workflow_stage=stage)
+        tags = _validate_publish_tags(
+            item["tags"], field=f"{platform}.tags", code=code, exact_five=False
+        )
+        normalized_platforms[platform] = {
+            "title": title,
+            "publish_copy": publish_copy,
+            "tags": tags,
+        }
+    cover_texts = _string_list(value["cover_texts"], "cover_texts", code=code)
+    if len(cover_texts) > 2 or len(set(cover_texts)) != len(cover_texts):
+        _fail(code, "cover_texts must contain zero to two unique options", workflow_stage=stage)
+    for item in cover_texts:
+        if "\x00" in item:
+            _fail(code, "cover_text contains unsafe text", workflow_stage=stage)
+    recommended = value["recommended_cover_text"]
+    if recommended is not None:
+        recommended = _nonempty(recommended, "recommended_cover_text", code=code)
+        if recommended not in cover_texts:
+            _fail(code, "recommended cover text must come from current options", workflow_stage=stage)
+    elif cover_texts:
+        _fail(code, "cover options require one recommended cover text", workflow_stage=stage)
+    return {
+        "contract_version": "content-koubo-publish-pack-result-v2",
+        "platforms": normalized_platforms,
+        "cover_texts": cover_texts,
+        "recommended_cover_text": recommended,
+    }
+
+
+def _validate_publish_pack_v1(value: dict[str, Any], *, code: str, stage: str) -> dict[str, Any]:
+    """Validate the frozen pre-platform contract without upgrading it."""
 
     cover_titles = _string_list(value["cover_titles"], "cover_titles", code=code)
     publish_titles = _string_list(value["publish_titles"], "publish_titles", code=code)
@@ -940,15 +1031,7 @@ def validate_publish_pack_result(value: Any) -> dict[str, Any]:
     if "\x00" in publish_copy:
         _fail(code, "publish_copy must not contain NUL", workflow_stage=stage)
 
-    tags = _string_list(value["tags"], "tags", code=code)
-    if len(tags) != 5 or any(
-        not tag.startswith("#")
-        or len(tag) < 2
-        or tag.count("#") != 1
-        or any(character.isspace() for character in tag)
-        for tag in tags
-    ):
-        _fail(code, "tags must contain 5 unique # labels without whitespace", workflow_stage=stage)
+    tags = _validate_publish_tags(value["tags"], field="tags", code=code, exact_five=True)
 
     return {
         "cover_titles": cover_titles,

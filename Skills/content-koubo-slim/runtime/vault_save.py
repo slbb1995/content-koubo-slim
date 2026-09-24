@@ -128,6 +128,7 @@ def save_markdown_pair(
     package_markdown: str,
     now: datetime | None = None,
     draft_version: int = 1,
+    package_version: int = 1,
     item_suffix: str | None = None,
     receipt_dir: str | Path | None = None,
 ) -> dict[str, Any]:
@@ -142,7 +143,8 @@ def save_markdown_pair(
         return save_with_receipt(output_root=output_root, output_template=output_template,
             client_id=client_id, selected_publish_title=selected_publish_title,
             oral_body=oral_body, package_markdown=package_markdown,
-            now=now, receipt_dir=receipt_dir, draft_version=draft_version, item_suffix=item_suffix)
+            now=now, receipt_dir=receipt_dir, draft_version=draft_version,
+            package_version=package_version, item_suffix=item_suffix)
     timestamp = now or datetime.now().astimezone()
     relative_dir = _render_template(output_template, client_id, timestamp)
     root = Path(output_root)
@@ -156,7 +158,7 @@ def save_markdown_pair(
     target_dir = _safe_directory(root, relative_dir)
     stem = _versioned_stem(selected_publish_title, draft_version, item_suffix)
     oral_path = target_dir / f"{stem}-口播稿.md"
-    package_path = target_dir / f"{stem}-配套文案.md"
+    package_path = target_dir / _package_filename(stem, package_version)
     oral_bytes = (oral_body + "\n").encode("utf-8")
     package_bytes = (package_markdown.rstrip() + "\n").encode("utf-8")
     _write_pair(((oral_path, oral_bytes), (package_path, package_bytes)))
@@ -171,6 +173,23 @@ def save_markdown_pair(
     }
 
 
+def save_markdown_package_revision(
+    *, output_root: str | Path, output_template: str, client_id: str,
+    archive_title: str, package_markdown: str, verified_oral: dict[str, Any],
+    receipt_dir: str | Path, draft_version: int, package_version: int,
+    item_suffix: str | None = None, now: datetime | None = None,
+) -> dict[str, Any]:
+    """Create only a new package revision after verifying the saved oral artifact."""
+    from .local_save_receipt import save_package_revision_with_receipt
+    return save_package_revision_with_receipt(
+        output_root=output_root, output_template=output_template, client_id=client_id,
+        archive_title=archive_title, package_markdown=package_markdown,
+        verified_oral=verified_oral, receipt_dir=receipt_dir,
+        draft_version=draft_version, package_version=package_version,
+        item_suffix=item_suffix, now=now,
+    )
+
+
 def _versioned_stem(title: str, draft_version: int = 1, item_suffix: str | None = None) -> str:
     """One naming rule for local output, remote output and receipt verification."""
     if type(draft_version) is not int or draft_version < 1:
@@ -183,3 +202,10 @@ def _versioned_stem(title: str, draft_version: int = 1, item_suffix: str | None 
     if draft_version > 1:
         stem += f"-第{draft_version}版"
     return stem
+
+
+def _package_filename(stem: str, package_version: int) -> str:
+    if type(package_version) is not int or package_version < 1:
+        _fail("package version must be a positive integer")
+    suffix = "" if package_version == 1 else f"-第{package_version}版"
+    return f"{stem}-配套文案{suffix}.md"

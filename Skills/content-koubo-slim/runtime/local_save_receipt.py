@@ -35,7 +35,8 @@ def _persist(path, state):
 
 def save_with_receipt(*, output_root, output_template, client_id,
                       selected_publish_title, oral_body, package_markdown,
-                      receipt_dir, now=None, draft_version=1, item_suffix=None):
+                      receipt_dir, now=None, draft_version=1, package_version=1,
+                      item_suffix=None):
     receipt = Path(receipt_dir)
     lock = None
     locked = False
@@ -61,6 +62,8 @@ def save_with_receipt(*, output_root, output_template, client_id,
             draft_version=draft_version, item_suffix=item_suffix,
             oral_sha256=hashlib.sha256((oral_body+'\n').encode('utf-8')).hexdigest(),
             package_sha256=hashlib.sha256((package_markdown.rstrip()+'\n').encode('utf-8')).hexdigest())
+        if package_version != 1:
+            request['package_version'] = package_version
         if path.exists():
             state = json.loads(path.read_text(encoding='utf-8'))
             if (not isinstance(state, dict) or set(state) != {'version','request','timestamp','result','identities'}
@@ -72,14 +75,17 @@ def save_with_receipt(*, output_root, output_template, client_id,
             state = dict(version=1, request=request, timestamp=timestamp.isoformat(), result=None, identities={})
             _persist(path, state)
         if state['result'] is not None:
-            from .vault_save import _render_template, _versioned_stem
+            from .vault_save import _render_template, _versioned_stem, _package_filename
             relative = _render_template(output_template, client_id, timestamp)
             stem = _versioned_stem(selected_publish_title, draft_version, item_suffix)
             result = dict(state['result'])
             if set(result) != {'oral_path','package_path','oral_relative_path','package_relative_path','oral_sha256','package_sha256','publish_status'} or result['publish_status'] != 'not_requested':
                 _fail('malformed local save result')
-            for kind, suffix in (('oral','口播稿'),('package','配套文案')):
-                target = root.joinpath(*relative.parts, stem+'-'+suffix+'.md')
+            targets = {
+                'oral': root.joinpath(*relative.parts, stem+'-口播稿.md'),
+                'package': root.joinpath(*relative.parts, _package_filename(stem, request.get('package_version', 1))),
+            }
+            for kind, target in targets.items():
                 _reject_reparse(target)
                 if result[kind+'_path'] != str(target) or result[kind+'_relative_path'] != target.relative_to(root).as_posix():
                     _fail('saved location changed')
@@ -96,7 +102,8 @@ def save_with_receipt(*, output_root, output_template, client_id,
         result = save_markdown_pair(output_root=root, output_template=output_template,
             client_id=client_id, selected_publish_title=selected_publish_title,
             oral_body=oral_body, package_markdown=package_markdown, now=timestamp,
-            draft_version=draft_version, item_suffix=item_suffix)
+            draft_version=draft_version, package_version=package_version,
+            item_suffix=item_suffix)
         state['result'] = {k: str(v) if isinstance(v, Path) else v for k,v in result.items()}
         state['identities'] = {kind: [result[kind+'_path'].stat().st_dev, result[kind+'_path'].stat().st_ino] for kind in ('oral','package')}
         _persist(path, state)
@@ -110,5 +117,110 @@ def save_with_receipt(*, output_root, output_template, client_id,
             try:
                 if locked:
                     RunStore._unlock_file(lock)
+            finally:
+                lock.close()
+
+
+def save_package_revision_with_receipt(*, output_root, output_template, client_id,
+                                      archive_title, package_markdown, verified_oral,
+                                      receipt_dir, draft_version, package_version,
+                                      item_suffix=None, now=None):
+    """Verify the acknowledged oral file, then create/reuse one package revision."""
+    from .vault_save import _versioned_stem, _package_filename
+    receipt = Path(receipt_dir)
+    lock = None
+    locked = False
+    try:
+        if type(package_version) is not int or package_version < 2:
+            _fail('package-only revision requires package_version >= 2')
+        root = Path(output_root)
+        if not root.is_absolute() or not root.is_dir() or not receipt.is_absolute():
+            _fail('output and receipt roots must be existing absolute paths')
+        _reject_reparse(root); _reject_reparse(receipt)
+        root = root.resolve(strict=True)
+        oral_path = Path(verified_oral.get('oral_path', ''))
+        _reject_reparse(oral_path)
+        if (not oral_path.is_absolute() or not oral_path.is_file()
+                or root not in oral_path.resolve(strict=True).parents):
+            _fail('saved oral path is outside the authorized output root')
+        oral_hash = hashlib.sha256(oral_path.read_bytes()).hexdigest()
+        if oral_hash != verified_oral.get('oral_sha256'):
+            _fail('saved oral content no longer matches its acknowledgement')
+        receipt.mkdir(parents=True, exist_ok=True)
+        path = receipt / 'local-package-save.json'
+        lock_path = receipt / 'local-package-save.lock'
+        lock = lock_path.open('a+b'); RunStore._lock_file(lock); locked = True
+        timestamp = now or datetime.now().astimezone()
+        if path.exists():
+            state = json.loads(path.read_text(encoding='utf-8'))
+            if not isinstance(state, dict) or set(state) != {'version','request','timestamp','result','identity'}:
+                _fail('package revision receipt is invalid')
+            timestamp = datetime.fromisoformat(state['timestamp'])
+        stem = _versioned_stem(archive_title, draft_version, item_suffix)
+        package_path = oral_path.parent / _package_filename(stem, package_version)
+        payload = (package_markdown.rstrip()+'\n').encode('utf-8')
+        request = dict(root=str(root), output_template=output_template, client_id=client_id,
+            archive_title=archive_title, draft_version=draft_version,
+            package_version=package_version, item_suffix=item_suffix,
+            oral_path=str(oral_path), oral_sha256=oral_hash,
+            package_path=str(package_path), package_sha256=hashlib.sha256(payload).hexdigest())
+        if path.exists():
+            if state['version'] != 1 or state['request'] != request:
+                _fail('package revision receipt belongs to different approved content')
+        else:
+            state = dict(version=1, request=request, timestamp=timestamp.isoformat(), result=None, identity=None)
+            _persist(path, state)
+        if state['result'] is None:
+            if package_path.exists() or package_path.is_symlink():
+                _fail('package revision target already exists without acknowledgement')
+            identity = None
+            try:
+                with package_path.open('xb') as handle:
+                    stat = os.fstat(handle.fileno()); identity = (stat.st_dev, stat.st_ino)
+                    if handle.write(payload) != len(payload):
+                        raise OSError('short package revision write')
+                    handle.flush(); os.fsync(handle.fileno())
+                if package_path.is_symlink() or package_path.read_bytes() != payload:
+                    raise OSError('package revision readback failed')
+            except OSError:
+                try:
+                    if identity is not None and package_path.exists():
+                        current = package_path.stat()
+                        if (current.st_dev, current.st_ino) == identity:
+                            package_path.unlink()
+                except OSError:
+                    pass
+                raise
+            result = dict(oral_path=str(oral_path), package_path=str(package_path),
+                oral_relative_path=oral_path.relative_to(root).as_posix(),
+                package_relative_path=package_path.relative_to(root).as_posix(),
+                oral_sha256=oral_hash, package_sha256=request['package_sha256'],
+                publish_status='not_requested')
+            state['result'] = result; state['identity'] = [stat.st_dev, stat.st_ino]
+            _persist(path, state)
+        result = dict(state['result'])
+        expected_result_fields = {'oral_path','package_path','oral_relative_path','package_relative_path',
+            'oral_sha256','package_sha256','publish_status'}
+        if (set(result) != expected_result_fields or result.get('publish_status') != 'not_requested'
+                or result.get('oral_path') != request['oral_path']
+                or result.get('package_path') != request['package_path']
+                or result.get('oral_sha256') != request['oral_sha256']
+                or result.get('package_sha256') != request['package_sha256']):
+            _fail('package revision result is malformed or changed')
+        package_path = Path(result['package_path']); _reject_reparse(package_path)
+        stat = package_path.stat()
+        if (state['identity'] != [stat.st_dev, stat.st_ino]
+                or hashlib.sha256(package_path.read_bytes()).hexdigest() != request['package_sha256']):
+            _fail('acknowledged package revision changed')
+        result['oral_path'] = oral_path; result['package_path'] = package_path
+        return result
+    except SlimRuntimeError:
+        raise
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        _fail('local package revision save stopped: '+str(exc))
+    finally:
+        if lock is not None:
+            try:
+                if locked: RunStore._unlock_file(lock)
             finally:
                 lock.close()

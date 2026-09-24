@@ -1,97 +1,84 @@
 ---
 name: content-koubo-publish-pack
-description: Content 口播 Slim 的配套文案生成 Skill。用于同一 Run 的口播正文已获真人确认后，只根据该正文生成或按真人意见修改 2 个封面标题、3 个发布标题、推荐项、默认 50—100 字、可按用户要求调整的发布说明和 5 个标签。不得修改正文、搜索 Vault、调用旧标题/分发 Skill 或 Reviewer、保存、发布或进入 P6。
+description: Content 口播 Slim 的三平台配套文案生成 Skill。用于同一 Run 的口播正文已获真人确认后，为抖音、小红书、视频号生成或局部修改各一套可直接使用的标题、发布正文和 Tag，并可提供封面文字。不得修改正文、重搜客户资料、保存、发布或进入 P6。
 ---
 
 # Content Publish Pack
 
-## 一句话目的
+## 目的与边界
 
-把一份已确认口播正文包装成一次可完整确认的标题、发布说明和标签候选，不给正文增加新事实。
+把一份已确认口播正文整理成目标平台各一套可直接复制的发布配套。正文是事实、数字、身份、产品能力、案例、承诺和 CTA 的唯一边界；平台规则、受众、内容目的、讲述模式、口吻样例及用户禁区只决定写法，不能给新事实开口子。
 
-## 使用边界
+只读取编排器的 `content-koubo-publish-pack-input-v2`，字段合同见 [输入 Schema](schemas/publish-pack-input-v2.schema.json)，输出合同见 [结果 Schema](schemas/publish-pack-result-v2.schema.json)。不打开 Registry、Manifest、03/04/05、Vault、网络、历史稿或其他客户资料，不调用旧标题/分发 Skill、Reviewer、保存或发布能力。`company_brand` 与 `neutral` 没有个人口吻样例时照常工作，不虚构个人经历。
 
-- 只接收程序重新校验过的已确认正文；正文是只读事实边界；
-- 修改时可额外接收当前 `package_vN` 与本次具体真人意见，它们不形成第二层 Pack；
-- 不创建 Run、状态、版本、确认收据、Reviewer、任务句柄或临时程序；
-- 不打开 Registry、Manifest、Vault、参考件、网络、历史稿或其他客户资料；
-- 不调用旧 `viral-headline-creator`、`content-distribution-pack` 或 `content-save`。
+## 平台规则
 
-正文未确认、版本错绑、正文双文件不一致，或请求需要改变正文、原题、客户、讲述者和已批准方向时，停止并回到对应阶段。
+根据 `target_platforms` 只读对应规则；规则版本必须与输入一致：
+
+- `douyin`：[抖音](references/douyin.md)
+- `xiaohongshu`：[小红书](references/xiaohongshu.md)
+- `wechat_channels`：[视频号](references/wechat-channels.md)
+
+这些文件区分官方可核验边界与内部编辑建议。未核验的字符限制、固定 Tag 数量、算法权重、热度和流量保证都不能自行补充。普通生成不搜索热词；没有真实数据时只输出相关话题建议。
 
 ## 输入
 
-首版只读取编排器提供的：
-
 ```json
 {
-  "approved_draft": {
-    "draft_version": 2,
-    "body": "用户已经确认的完整口播正文"
+  "package_contract_version": "content-koubo-publish-pack-input-v2",
+  "approved_draft": {"draft_version": 2, "body": "完整确认正文"},
+  "writing_context": {
+    "target_audience": "已确认受众",
+    "content_goal": "explain | discuss | convert",
+    "speaker_mode": "personal_ip | company_brand | neutral",
+    "voice_guidance": null,
+    "must_avoid": [],
+    "fact_boundary": "approved_draft_only"
   },
+  "target_platforms": ["douyin", "xiaohongshu", "wechat_channels"],
+  "platform_rule_versions": {},
   "base_package_version": 0,
   "previous_package": null,
-  "revision_request": null
+  "revision_request": null,
+  "revision_scope": null
 }
 ```
 
-修改版的 `previous_package` 是当前完整配套对象，`revision_request` 是本次真人修改意见。不要自行补搜背景、改变正文或生成第二份正文。
+`voice_guidance` 存在时只学习表达习惯，其中的例句不能成为配套事实。`revision_scope` 为 `平台.字段` 列表，例如 `xiaohongshu.publish_copy`；未列出的字段必须逐值保留。增减平台、整套重做或修改封面文字不靠模糊推断，分别使用明确目标平台或 `cover_texts` scope。
 
 ## 输出
 
-只返回一个 JSON 对象：
+只返回一个 JSON 对象，不附解释：
 
 ```json
 {
-  "cover_titles": ["封面标题一", "封面标题二"],
-  "publish_titles": ["发布标题一", "发布标题二", "发布标题三"],
-  "recommended_cover_title": "封面标题一",
-  "recommended_publish_title": "发布标题一",
-  "publish_copy": "默认 50—100 字、可按用户要求调整的发布说明",
-  "tags": ["#标签一", "#标签二", "#标签三", "#标签四", "#标签五"]
+  "contract_version": "content-koubo-publish-pack-result-v2",
+  "platforms": {
+    "douyin": {"title": "一条成品标题", "publish_copy": "成品正文", "tags": ["#主题词"]},
+    "xiaohongshu": {"title": "一条成品标题", "publish_copy": "成品正文", "tags": ["#主题词"]},
+    "wechat_channels": {"title": "一条成品标题", "publish_copy": "成品正文", "tags": ["#主题词"]}
+  },
+  "cover_texts": [],
+  "recommended_cover_text": null
 }
 ```
 
-- 根对象只允许以上六个字段；
-- 不输出正文、版本、哈希、状态、审核说明、保存路径或发布信息；
-- 不在 JSON 前后附解释。
+只输出 `target_platforms` 中的平台。每个平台默认一条标题、一段正文、1—5 个相关 Tag；数量是编辑默认，不是平台硬限制。主题词允许跨平台重复。封面文字可为 0—2 条；有候选时推荐项必须来自候选。备选标题只在真人明确要求时通过新配套版本处理，不把评分、来源说明或推荐理由混进可复制成品。
 
-## 执行流程
+## 写作与自检
 
-1. 从已确认正文找出主题对象、目标观众、核心判断和正文实际回答的问题；
-2. 生成恰好 2 个方向有区别的封面标题：单独放在画面上也能点题，不写“干货分享、值得收藏、先问清几件事”等空泛流程句；
-3. 生成恰好 3 个发布标题：围绕同一正文主判断，从问题、误区、判断或人群场景选择不同角度；
-4. 从当前候选中各推荐 1 个封面标题和发布标题，不把 AI 推荐冒充真人选择；
-5. 按本次长度要求写发布说明，未指定时建议 50—100 字，只概括正文已有价值；
-6. 生成恰好 5 个互不重复、服务同一主题的标签；
-7. 修改时只解决当前真人意见，仍返回一份完整对象；
-8. 逐项确认所有内容都能回指正文，返回唯一对象后停止。
+先从正文提取具体对象、实际问题、核心判断、视频能兑现的答案和影响结论的条件，再按内容目的与平台阅读方式组织。三个平台应改变切入重点或信息组织，不能只换同义词、emoji 或 Tag。
 
-## 内容边界
+- `explain` 可突出步骤、条件或判断依据；
+- `discuss` 可呈现正文已有观点与处境，不强行改成清单；
+- `convert` 只承接正文已有且获授权的动作，不新增私信、领取、预约、购买等 CTA。
 
-- 标题、发布说明和标签不能补造客户业务、产品、案例、数据、身份、承诺、CTA 或热点；
-- 疑问标题只能提出正文确实回答的问题；
-- 不使用夸大收益、绝对承诺、恐吓、羞辱、假稀缺、倒计时或无依据数字；
-- 封面标题不能只是发布标题的机械截短，五个标题不能规范化后重复；
-- 不逐句搬运来源识别性表达；本 Skill 看不到参考全文，不声称完成版权审核；
-- 发布说明不重复整篇正文，标签不借名人、机构或热点扩大事实范围；
-- 没有正文依据时删掉候选内容，不向 Vault 或用户索要额外资料补齐。
-- 50—100 字是默认建议，不是校验硬限；用户可在首次生成或修改时要求更短、更长、分段。将要求作为本次 revision_request 传入；不把发布说明字数当作口播时长。
+返回前一次自检：标题可由正文兑现；正文没有扩大承诺；Tag 只来自本稿主题、问题、场景或人群；没有虚构亲测、客户结果、热点和联系方式；不同平台不是机械换词；`revision_scope` 外字段完全不变。
 
-## 真人停点
+## 修改、确认与停止
 
-把完整配套交给用户，只接受“确认并保存”或带具体意见的“需要修改”。本 Skill 不代替真人确认，也不执行保存。用户确认后由编排器在同一个动作中保存，不再增加第四个确认点。
+修改时接收当前完整配套与真人意见，返回完整新对象，旧版本保留。若意见要求改正文、换题、换客户、换讲述者或增加正文没有的事实，停止并回相应阶段。
 
-## 错误与停止
+完整展示三平台配套后仍只有第三个真人停点。用户说“三个平台都采用推荐项”表示确认当前各平台成品；说“只改小红书正文”时编排器必须传 `xiaohongshu.publish_copy` scope。确认由入口记录，本 Skill 不创建收据、不保存、不发布。
 
-- 输入不是程序校验过的已确认正文时停止；
-- 修改意见为空，或要求修改正文、换题、换客户、换讲述者时停止；
-- 输出数量、推荐项、发布说明内容或标签不合法时，修正后再返回；
-- 无法在正文边界内生成某项时说明缺口，不补造事实或生成半套配套；
-- 不保存、不调用 Git、不上传、不发布、不进入 P6。
-
-## 最小示例
-
-编排器提供已确认 `draft_v2`。生成完整 `package_v1` 后，用户说“第二个发布标题太抽象，改得更具体”，则只根据同一正文和当前配套生成 `package_v2`；用户确认时停止，由程序保存纯口播和配套两份产物（Obsidian：两个 Markdown；飞书：两份云文档）。
-
-设计原因保存在 Factory 设计卡；版本、最终确认、路径和双文件保存由 `content-koubo-slim` Runtime 负责。
+旧 v1 通用配套由 Runtime 原样读取和恢复，不在本 Skill 中凭空补成三平台，也不替换旧批准记录。设计原因保存在 Factory 设计卡；版本与保存由 `content-koubo-slim` Runtime 管理。
