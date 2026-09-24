@@ -80,10 +80,10 @@
         "skill": "content-koubo-context-retriever"
       },
       {
-        "bytes": 5242,
+        "bytes": 5329,
         "mode": "0644",
         "path": "Skills/content-koubo-publish-pack/SKILL.md",
-        "sha256": "3dbd568d87a54086f7f6ab177a239956f1a61e0277e864b39f3e1aad08ab8960",
+        "sha256": "87c59dc033c05a90a2081b9c897fbc2eae0477d42f946483775929187ce2aead",
         "skill": "content-koubo-publish-pack"
       },
       {
@@ -129,10 +129,10 @@
         "skill": "content-koubo-publish-pack"
       },
       {
-        "bytes": 18308,
+        "bytes": 18549,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/SKILL.md",
-        "sha256": "1d6016477fe2556d6eea8dc4cdd2713396f8c9100ff8dd1e4a9972e755badf6b",
+        "sha256": "c3408a2a08872f8477060ec7fa8b66e4ae3f52d80eb9bd695310a2b590969f6c",
         "skill": "content-koubo-slim"
       },
       {
@@ -185,10 +185,10 @@
         "skill": "content-koubo-slim"
       },
       {
-        "bytes": 10587,
+        "bytes": 11808,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/runtime/batch_tasks.py",
-        "sha256": "61cbb21093afa3156c5e3e68a6affa3bfece07f68af44822b1551536c2bf05cc",
+        "sha256": "02543b5a88b45555df363609027162780b8048edc0cf0bcac196ba9b238aee86",
         "skill": "content-koubo-slim"
       },
       {
@@ -241,10 +241,10 @@
         "skill": "content-koubo-slim"
       },
       {
-        "bytes": 19081,
+        "bytes": 22359,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/runtime/feishu_save.py",
-        "sha256": "9fd8551bf5316cca555ed73a8673aa4d426232c4c3b0da7a2a81fe319dea3825",
+        "sha256": "ae00023e93446b89b0074d433c1b5e121e923012634635a4356dcdf4511dd338",
         "skill": "content-koubo-slim"
       },
       {
@@ -346,10 +346,10 @@
         "skill": "content-koubo-slim"
       },
       {
-        "bytes": 116050,
+        "bytes": 124064,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/scripts/content_koubo_slim.py",
-        "sha256": "0f3f50a9ed875bbfd2316ffe91f6a1173f12c5e46023f04a54ac1396d3d1d9c2",
+        "sha256": "79ce316341423ffe28169c49d9498ef91780d53b836d750c4b99120636522ca9",
         "skill": "content-koubo-slim"
       },
       {
@@ -404,7 +404,7 @@
       "content-koubo-slim",
       "content-koubo-writer"
     ],
-    "tree_sha256": "1b7e837deb99ece542b5f834bb1e3d4542db61b8fe11f4fba839a48e2f2ec103"
+    "tree_sha256": "2330ea24a078e9efe585eb72e29bdf5024ef300e9abdf5326db67d5f7d01af7c"
   },
   "schema_version": "content-koubo-slim-release-v1",
   "source": {

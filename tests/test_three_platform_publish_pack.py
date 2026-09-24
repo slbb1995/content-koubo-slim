@@ -12,11 +12,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "Skills/content-koubo-slim"), str(ROOT / "tests")]
 
 from runtime.error_model import SlimRuntimeError
-from runtime.feishu_save import save_feishu_pair, save_feishu_package_revision
+from runtime.feishu_save import (
+    save_feishu_pair, save_feishu_package_revision,
+    verify_saved_feishu_pair, verify_saved_feishu_package_revision,
+)
 from runtime.feishu_source import FeishuRoot, FeishuSpace
 from runtime.schema_validation import validate_publish_pack_result
 from scripts import content_koubo_slim as api
 import test_customer_repairs as customer_fixtures
+import test_batch_tasks as batch_fixtures
 from test_feishu_retained import FakeClient
 
 
@@ -83,6 +87,21 @@ class ThreePlatformRunTests(unittest.TestCase):
         ])
         self.assertEqual(args.target_platform, ["xiaohongshu"])
         self.assertEqual(args.revision_scope, ["xiaohongshu.publish_copy"])
+        alias = api.build_parser().parse_args([
+            "respond-package", "--task-record", "controlled",
+            "--decision", "三个平台都采用推荐项",
+        ])
+        self.assertEqual(alias.decision, "确认并保存")
+
+    def test_confirmation_alias_executes_only_the_exact_supported_phrase(self):
+        self.record(platform_pack(), base=0)
+        completed, _ = api.respond_package(
+            **self.args, registry_path=self.registry, decision="三个平台都采用推荐项。"
+        )
+        self.assertEqual(completed["status"], "completed")
+        with self.assertRaises(SlimRuntimeError):
+            api.respond_package(**self.args, registry_path=self.registry,
+                                decision="三个平台差不多都采用")
 
     def test_prepare_projects_context_but_keeps_body_as_fact_boundary(self):
         handoff, _ = api.prepare_package_stage(**self.args)
@@ -107,6 +126,9 @@ class ThreePlatformRunTests(unittest.TestCase):
             feedback="只改小红书发布正文", revision_scope=["xiaohongshu.publish_copy"],
         )
         self.assertEqual(handoff["previous_package"], platform_pack())
+        with self.assertRaises(SlimRuntimeError):
+            api.respond_package(**self.args, registry_path=self.registry, decision="确认并保存")
+        self.assertFalse((artifacts / "saved_release_d1_p2.json").exists())
         revised = platform_pack(xhs_copy="按输入、输出、检查人三步自查，方便团队保存后逐项核对。")
         self.record(revised, base=1, feedback="只改小红书发布正文",
                     scope=["xiaohongshu.publish_copy"])
@@ -131,6 +153,39 @@ class ThreePlatformRunTests(unittest.TestCase):
             self.record(bad, base=1, feedback="只改小红书正文",
                         scope=["xiaohongshu.publish_copy"])
 
+    def test_frozen_scope_survives_cross_process_and_cannot_be_omitted_to_expand_authority(self):
+        self.record(platform_pack(), base=0)
+        api.respond_package(**self.args, registry_path=self.registry, decision="需要修改",
+            feedback="只改小红书正文", revision_scope=["xiaohongshu.publish_copy"])
+        bad = platform_pack(xhs_copy="新版小红书正文")
+        bad["platforms"]["douyin"]["title"] = "试图跨进程顺带改抖音"
+        result_path = self.fixture.root / "bad-platform-pack.json"
+        result_path.write_text(__import__("json").dumps(bad, ensure_ascii=False), encoding="utf-8")
+        command = [sys.executable, "-B", str(Path(api.__file__)), "record-package",
+            "--runs-root", str(self.fixture.runs), "--task-record", self.fixture.record,
+            "--base-package-version", "1", "--based-on-draft-version", "1",
+            "--package-result", str(result_path)]
+        result = __import__("subprocess").run(command, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.store.latest_version(self.key, "package")[0], 1)
+        with self.assertRaises(SlimRuntimeError):
+            api.record_package_result(**self.args, base_package_version=1,
+                package_result=platform_pack(xhs_copy="新版小红书正文"),
+                target_platforms=["xiaohongshu"], based_on_draft_version=1)
+
+    def test_explicit_platform_or_v2_history_cannot_accept_legacy_output(self):
+        with self.assertRaises(SlimRuntimeError):
+            api.record_package_result(**self.args, base_package_version=0,
+                package_result=customer_fixtures.pack(), target_platforms=["xiaohongshu"],
+                based_on_draft_version=1)
+        self.record(platform_pack(), base=0)
+        api.respond_package(**self.args, registry_path=self.registry, decision="需要修改",
+            feedback="调整整套平台配套")
+        with self.assertRaises(SlimRuntimeError):
+            api.record_package_result(**self.args, base_package_version=1,
+                package_result=customer_fixtures.pack(), revision_feedback="调整整套平台配套",
+                based_on_draft_version=1)
+
 
 class ThreePlatformSaveTests(unittest.TestCase):
     def test_readable_samples_cover_three_industries_goals_and_modes_without_claiming_traffic(self):
@@ -147,6 +202,8 @@ class ThreePlatformSaveTests(unittest.TestCase):
         for leaked in ("保单", "理赔", "百万医疗"):
             self.assertNotIn(leaked, enterprise)
             self.assertNotIn(leaked, home)
+        for unsupported in ("承重", "管线", "减少来回确认"):
+            self.assertNotIn(unsupported, home)
 
     def test_feishu_package_revision_reuses_verified_oral_and_retries_without_duplicates(self):
         with tempfile.TemporaryDirectory(dir=ROOT, prefix=".three-platform-feishu-") as folder:
@@ -158,6 +215,10 @@ class ThreePlatformSaveTests(unittest.TestCase):
                 package_markdown="第一版三平台配套", receipt_dir=Path(folder) / "d1-p1",
                 now=datetime(2026, 9, 24, tzinfo=timezone.utc),
             )
+            self.assertTrue(verify_saved_feishu_pair(
+                output_root=root, output_template="YYYY/M/W",
+                receipt_dir=Path(folder) / "d1-p1", expected_result=first,
+                draft_version=1, package_version=1, item_suffix=None))
             second = save_feishu_package_revision(
                 output_root=root, output_template="YYYY/M/W", client_id="qa",
                 archive_title="稳定归档名", package_markdown="第二版三平台配套",
@@ -179,6 +240,13 @@ class ThreePlatformSaveTests(unittest.TestCase):
             self.assertNotEqual(first["package_ref"], second["package_ref"])
             self.assertEqual(client.get_node(first["oral_ref"])["parent_node_token"],
                              client.get_node(second["package_ref"])["parent_node_token"])
+            verify_args = dict(output_root=root, output_template="YYYY/M/W",
+                receipt_dir=Path(folder) / "d1-p2", expected_result=second,
+                draft_version=1, package_version=2, item_suffix=None)
+            self.assertTrue(verify_saved_feishu_package_revision(**verify_args))
+            package_obj = client.get_node(second["package_ref"])["obj_token"]
+            client.bodies[package_obj] = "外部篡改"
+            self.assertFalse(verify_saved_feishu_package_revision(**verify_args))
 
     def test_local_package_revision_failure_cleans_owned_partial_and_retry_succeeds(self):
         from runtime.vault_save import save_markdown_pair, save_markdown_package_revision
@@ -241,6 +309,60 @@ class ThreePlatformSaveTests(unittest.TestCase):
             saved = save_feishu_package_revision(**args)
             self.assertEqual(client.sequence, count)
             self.assertEqual(saved["oral_ref"], first["oral_ref"])
+
+    def test_feishu_unknown_package_revision_result_never_recreates(self):
+        with tempfile.TemporaryDirectory(dir=ROOT, prefix=".three-platform-feishu-unknown-") as folder:
+            client = FakeClient(); space = FeishuSpace("https://feishu.cn/wiki/space/123", "123", client)
+            root = FeishuRoot(space, "output", "output")
+            first = save_feishu_pair(output_root=root, output_template="weekly", client_id="qa",
+                selected_publish_title="稳定归档名", oral_body="合成正文",
+                package_markdown="第一版配套", receipt_dir=Path(folder) / "d1-p1")
+            calls = [0]
+            def unknown(parent, title, body):
+                calls[0] += 1
+                raise TimeoutError("unknown remote result")
+            args = dict(output_root=root, output_template="weekly", client_id="qa",
+                archive_title="稳定归档名", package_markdown="第二版配套",
+                verified_oral=first, receipt_dir=Path(folder) / "d1-p2",
+                draft_version=1, package_version=2)
+            with patch.object(client, "create_document", unknown), self.assertRaises(SlimRuntimeError):
+                save_feishu_package_revision(**args)
+            with patch.object(client, "create_document", unknown), self.assertRaises(SlimRuntimeError):
+                save_feishu_package_revision(**args)
+            self.assertEqual(calls[0], 1)
+
+    def test_batch_status_verifies_latest_v2_package_not_legacy_receipt(self):
+        fixture = batch_fixtures.BatchTests(); fixture.setUp(); self.addCleanup(fixture.doCleanups)
+        record = fixture.start()["items"][0]["task_record"]
+        key = fixture.finish(record)
+        args = {"runs_root": fixture.runs, "task_record": record}
+        api.respond_package(**args, registry_path=fixture.registry, decision="需要修改",
+            feedback="升级为三平台配套")
+        api.record_package_result(**args, base_package_version=1,
+            package_result=platform_pack(), revision_feedback="升级为三平台配套",
+            based_on_draft_version=1)
+        api.respond_package(**args, registry_path=fixture.registry, decision="确认并保存")
+        store = __import__("runtime.run_store", fromlist=["RunStore"]).RunStore(fixture.runs)
+        status = batch_fixtures.batch_status(store, fixture.plan["batch_id"])
+        self.assertEqual(status["saved_count"], 1)
+        latest = store.read_fixed_json(key, "saved_release_d1_p2.json")
+        Path(latest["package_path"]).unlink()
+        status = batch_fixtures.batch_status(store, fixture.plan["batch_id"])
+        self.assertEqual(status["saved_count"], 0)
+        self.assertEqual(status["items"][0]["state"], "saved_files_changed")
+
+    def test_batch_status_verifies_initial_v2_pair_receipt(self):
+        fixture = batch_fixtures.BatchTests(); fixture.setUp(); self.addCleanup(fixture.doCleanups)
+        record = fixture.start()["items"][0]["task_record"]
+        original = api.record_package_result
+        def record_v2(**kwargs):
+            return original(**{**kwargs, "package_result": platform_pack()})
+        with patch.object(api, "record_package_result", record_v2):
+            key = fixture.finish(record)
+        store = __import__("runtime.run_store", fromlist=["RunStore"]).RunStore(fixture.runs)
+        self.assertEqual(batch_fixtures.batch_status(store, fixture.plan["batch_id"])["saved_count"], 1)
+        self.assertTrue((store.run_directory(key) / "feishu-save" / "d1-p1").exists()
+                        or (store.run_directory(key) / "local-save" / "d1-p1").exists())
 
     def test_same_archive_name_batch_suffixes_do_not_collide(self):
         from runtime.vault_save import save_markdown_pair

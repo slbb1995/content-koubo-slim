@@ -26,6 +26,14 @@ def pack():
         'tags':['#服务价值','#客户体验','#售后服务','#沟通','#消费选择']}
 
 
+def platform_pack():
+    return {'contract_version':'content-koubo-publish-pack-result-v2','platforms':{
+        'douyin':{'title':'买完以后谁来帮','publish_copy':'先问清楚服务范围，再做选择。','tags':['#服务价值']},
+        'xiaohongshu':{'title':'服务价值怎么判断','publish_copy':'整理服务范围和使用条件，再判断是否适合自己。','tags':['#服务价值','#消费选择']},
+        'wechat_channels':{'title':'购买以后还有哪些帮助','publish_copy':'把实际服务范围与需要解决的问题逐项核对。','tags':['#售后服务','#沟通']}},
+        'cover_texts':[],'recommended_cover_text':None}
+
+
 class CustomerRepairTests(unittest.TestCase):
     def setUp(self):
         if STANDALONE:
@@ -62,6 +70,9 @@ class CustomerRepairTests(unittest.TestCase):
     def package(self,base=0):
         api.record_package_result(**self.args,base_package_version=base,package_result=pack(),based_on_draft_version=self.store.latest_version(self.key,"draft")[0])
 
+    def package_v2(self,base=0):
+        api.record_package_result(**self.args,base_package_version=base,package_result=platform_pack(),based_on_draft_version=self.store.latest_version(self.key,"draft")[0])
+
     def save(self):
         return api.respond_package(**self.args,registry_path=self.registry,decision='确认并保存')[0]
 
@@ -83,7 +94,7 @@ class CustomerRepairTests(unittest.TestCase):
         wi,_=api.prepare_package_stage(**self.args)
         self.assertEqual(wi['base_package_version'],1);self.assertIsNone(wi['previous_package'])
         with self.assertRaises(SlimRuntimeError):self.save()
-        self.package(1);self.assertEqual(self.save()['status'],'completed')
+        self.package_v2(1);self.assertEqual(self.save()['status'],'completed')
 
     def test_saved_run_revises_twice_and_old_files_stay_unchanged(self):
         self.package();self.save()
@@ -111,7 +122,7 @@ class CustomerRepairTests(unittest.TestCase):
             with self.assertRaises(SlimRuntimeError):
                 api.record_package_result(**self.args,base_package_version=0,package_result=pack(),based_on_draft_version=bound)
         self.assertFalse(any((self.store.run_directory(self.key)/'artifacts').glob('package_v*.json')))
-        self.package();self.assertEqual(self.save()['status'],'completed')
+        self.package_v2();self.assertEqual(self.save()['status'],'completed')
 
     def test_variable_publish_description_and_explicit_first_request(self):
         value,_=api.prepare_package_stage(**self.args,revision_feedback='发布说明写成150字')

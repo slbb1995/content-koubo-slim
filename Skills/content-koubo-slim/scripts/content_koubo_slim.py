@@ -79,6 +79,7 @@ from runtime.vault_search import (search_knowledge_assets, search_method_assets,
 
 DRAFT_CHOICES = ("确认正文", "需要修改")
 PACKAGE_CHOICES = ("确认并保存", "需要修改")
+PACKAGE_CONFIRMATION_ALIASES = {"三个平台都采用推荐项": "确认并保存"}
 DEFAULT_TARGET_PLATFORMS = PUBLISH_PLATFORMS
 PLATFORM_RULE_VERSIONS = {
     "douyin": "2026-09-24-v1",
@@ -109,6 +110,11 @@ def _task_key_from_record(store: RunStore, task_record: str) -> str:
 
 def _normalize_topic(topic_original: str) -> str:
     return re.sub(r"\s+", " ", topic_original).strip()
+
+
+def _normalize_package_decision(value: str) -> str:
+    normalized = _normalize_decision(value)
+    return PACKAGE_CONFIRMATION_ALIASES.get(normalized, normalized)
 
 
 def _bounded_search_signal(value: str, *, limit: int = 280) -> str:
@@ -1322,6 +1328,31 @@ def _validate_platform_rule_versions(value: Any, targets: tuple[str, ...]) -> di
     return {item: value[item].strip() for item in targets}
 
 
+def _package_request_filename(draft_version: int, package_version: int) -> str:
+    if (type(draft_version) is not int or draft_version < 1
+            or type(package_version) is not int or package_version < 1):
+        raise SlimRuntimeError("SLIM_PACKAGE_RESPONSE_INVALID", "content_koubo_slim",
+            detail="target draft or package version is invalid", workflow_stage="正在生成配套文案",
+            run_exists=True, artifacts_exist=True, artifacts_preserved=True)
+    return f"package_request_d{draft_version}_p{package_version}.json"
+
+
+def _package_request_path(store: RunStore, task_key: str, draft_version: int,
+                          package_version: int) -> Path:
+    return (store.run_directory(task_key) / "artifacts"
+            / _package_request_filename(draft_version, package_version))
+
+
+def _has_v2_package(store: RunStore, task_key: str) -> bool:
+    for path in (store.run_directory(task_key) / "artifacts").glob("package_v*.json"):
+        try:
+            if store._read_json(path).get("contract_version") == "content-koubo-slim-package-v2":
+                return True
+        except (SlimRuntimeError, OSError, ValueError, TypeError):
+            return True
+    return False
+
+
 def _package_writing_context(store: RunStore, task_key: str) -> dict[str, Any]:
     """Project existing approved writing conditions without reopening 03/04/05."""
     approved = store.read_fixed_json(task_key, "approved_direction.json")
@@ -1385,6 +1416,7 @@ def prepare_package_stage(
     revision_feedback: str | None = None,
     target_platforms: list[str] | tuple[str, ...] | None = None,
     revision_scope: list[str] | tuple[str, ...] | None = None,
+    _legacy_compatibility: bool = False,
 ) -> tuple[dict[str, Any], str]:
     """Prepare P5 from the approved body plus style-only frozen projections."""
 
@@ -1402,16 +1434,6 @@ def prepare_package_stage(
             artifacts_preserved=store.artifacts_exist(task_key),
         )
     feedback = revision_feedback.strip() if isinstance(revision_feedback, str) else None
-    if state["state"] in {"package_pending", "saved"} and not feedback:
-        raise SlimRuntimeError(
-            "SLIM_PACKAGE_RESPONSE_INVALID",
-            "content_koubo_slim",
-            detail="package revision feedback is empty",
-            workflow_stage="等待你确认并保存",
-            run_exists=True,
-            artifacts_exist=True,
-            artifacts_preserved=True,
-        )
 
     approved_draft, approval = _approved_draft_input(store, task_key)
     writing_context = _package_writing_context(store, task_key)
@@ -1426,8 +1448,63 @@ def prepare_package_stage(
             current, version=base_version, approved_draft=approved_draft,
             draft_sha256=approval["draft_sha256"],
             writing_context_sha256=canonical_json_hash(writing_context))
-    targets = _normalize_target_platforms(target_platforms or previous_targets)
-    scope = _normalize_revision_scope(revision_scope)
+    next_version = base_version + 1
+    request_path = _package_request_path(
+        store, task_key, approved_draft["draft_version"], next_version)
+    frozen_request: dict[str, Any] | None = None
+    if request_path.exists() or request_path.is_symlink():
+        frozen_request = store.read_fixed_json(
+            task_key, _package_request_filename(approved_draft["draft_version"], next_version))
+        expected_request_fields = {
+            "contract_version", "target_package_version", "base_package_version",
+            "base_package_sha256", "based_on_draft_version", "based_on_draft_sha256",
+            "target_platforms", "platform_rule_versions", "writing_context_sha256",
+            "previous_package_sha256", "revision_request", "revision_scope",
+        }
+        if (set(frozen_request) != expected_request_fields
+                or frozen_request.get("contract_version") != "content-koubo-slim-package-request-v2"
+                or frozen_request.get("target_package_version") != next_version
+                or frozen_request.get("base_package_version") != base_version
+                or frozen_request.get("base_package_sha256") != (canonical_json_hash(current) if has_packages else None)
+                or frozen_request.get("based_on_draft_version") != approved_draft["draft_version"]
+                or frozen_request.get("based_on_draft_sha256") != approval["draft_sha256"]
+                or frozen_request.get("writing_context_sha256") != canonical_json_hash(writing_context)
+                or frozen_request.get("previous_package_sha256") != (canonical_json_hash(previous_package) if previous_package is not None else None)):
+            raise SlimRuntimeError("SLIM_PACKAGE_RESPONSE_INVALID", "content_koubo_slim",
+                detail="persisted package generation request no longer matches its base artifacts",
+                workflow_stage="正在生成配套文案", run_exists=True,
+                artifacts_exist=True, artifacts_preserved=True)
+        frozen_targets = _normalize_target_platforms(frozen_request["target_platforms"])
+        _validate_platform_rule_versions(frozen_request["platform_rule_versions"], frozen_targets)
+        frozen_scope = _normalize_revision_scope(frozen_request["revision_scope"])
+        if target_platforms is not None and tuple(target_platforms) != frozen_targets:
+            raise SlimRuntimeError("SLIM_PACKAGE_RESPONSE_INVALID", "content_koubo_slim",
+                detail="record attempted to change the frozen target platforms",
+                workflow_stage="正在生成配套文案", run_exists=True,
+                artifacts_exist=True, artifacts_preserved=True)
+        if revision_scope is not None and _normalize_revision_scope(revision_scope) != frozen_scope:
+            raise SlimRuntimeError("SLIM_PACKAGE_RESPONSE_INVALID", "content_koubo_slim",
+                detail="record attempted to change the frozen revision scope",
+                workflow_stage="正在生成配套文案", run_exists=True,
+                artifacts_exist=True, artifacts_preserved=True)
+        if feedback is not None and feedback != frozen_request["revision_request"]:
+            raise SlimRuntimeError("SLIM_PACKAGE_RESPONSE_INVALID", "content_koubo_slim",
+                detail="record attempted to change the frozen revision request",
+                workflow_stage="正在生成配套文案", run_exists=True,
+                artifacts_exist=True, artifacts_preserved=True)
+        targets = frozen_targets
+        scope = frozen_scope
+        feedback = frozen_request["revision_request"]
+        rule_versions = frozen_request["platform_rule_versions"]
+    else:
+        if state["state"] in {"package_pending", "saved"} and not feedback:
+            raise SlimRuntimeError(
+                "SLIM_PACKAGE_RESPONSE_INVALID", "content_koubo_slim",
+                detail="package revision feedback is empty", workflow_stage="等待你确认并保存",
+                run_exists=True, artifacts_exist=True, artifacts_preserved=True)
+        targets = _normalize_target_platforms(target_platforms or previous_targets)
+        scope = _normalize_revision_scope(revision_scope)
+        rule_versions = {item: PLATFORM_RULE_VERSIONS[item] for item in targets}
     if scope and not feedback:
         raise SlimRuntimeError("SLIM_PACKAGE_RESPONSE_INVALID", "content_koubo_slim",
             detail="revision scope requires concrete revision feedback", workflow_stage="正在生成配套文案",
@@ -1441,13 +1518,31 @@ def prepare_package_stage(
             detail="platform-scoped revision cannot add, remove, or reorder target platforms",
             workflow_stage="正在生成配套文案", run_exists=True,
             artifacts_exist=True, artifacts_preserved=True)
+    if not _legacy_compatibility and frozen_request is None:
+        frozen_request = {
+            "contract_version": "content-koubo-slim-package-request-v2",
+            "target_package_version": next_version,
+            "base_package_version": base_version,
+            "base_package_sha256": canonical_json_hash(current) if has_packages else None,
+            "based_on_draft_version": approved_draft["draft_version"],
+            "based_on_draft_sha256": approval["draft_sha256"],
+            "target_platforms": list(targets),
+            "platform_rule_versions": rule_versions,
+            "writing_context_sha256": canonical_json_hash(writing_context),
+            "previous_package_sha256": canonical_json_hash(previous_package) if previous_package is not None else None,
+            "revision_request": feedback,
+            "revision_scope": scope,
+        }
+        store.write_fixed_json(
+            task_key, _package_request_filename(approved_draft["draft_version"], next_version),
+            frozen_request)
     return (
         {
             "package_contract_version": "content-koubo-publish-pack-input-v2",
             "approved_draft": approved_draft,
             "writing_context": writing_context,
             "target_platforms": list(targets),
-            "platform_rule_versions": {item: PLATFORM_RULE_VERSIONS[item] for item in targets},
+            "platform_rule_versions": rule_versions,
             "base_package_version": base_version,
             "previous_package": previous_package,
             "revision_request": feedback,
@@ -1468,12 +1563,31 @@ def record_package_result(
     target_platforms: list[str] | tuple[str, ...] | None = None,
     revision_scope: list[str] | tuple[str, ...] | None = None,
 ) -> tuple[dict[str, Any], Path]:
+    legacy_result = isinstance(package_result, dict) and "contract_version" not in package_result
+    compatibility_store = RunStore(runs_root)
+    compatibility_key = _task_key_from_record(compatibility_store, task_record)
+    if legacy_result:
+        if target_platforms is not None or revision_scope is not None:
+            raise SlimRuntimeError("SLIM_PACKAGE_OUTPUT_INVALID", "content_koubo_slim",
+                detail="an explicit platform request requires the v2 package contract",
+                workflow_stage="正在生成配套文案", run_exists=True,
+                artifacts_exist=True, artifacts_preserved=True)
+        compatibility_draft_version = compatibility_store.latest_version(
+            compatibility_key, "draft")[0]
+        if (_package_request_path(compatibility_store, compatibility_key,
+                                  compatibility_draft_version, base_package_version + 1).exists()
+                or _has_v2_package(compatibility_store, compatibility_key)):
+            raise SlimRuntimeError("SLIM_PACKAGE_OUTPUT_INVALID", "content_koubo_slim",
+                detail="a v2 package request or history cannot be downgraded to the legacy contract",
+                workflow_stage="正在生成配套文案", run_exists=True,
+                artifacts_exist=True, artifacts_preserved=True)
     package_input, task_key = prepare_package_stage(
         runs_root=runs_root,
         task_record=task_record,
         revision_feedback=revision_feedback,
         target_platforms=target_platforms,
         revision_scope=revision_scope,
+        _legacy_compatibility=legacy_result,
     )
     current_draft_version = package_input["approved_draft"]["draft_version"]
     # Old first-draft callers remain compatible; revised drafts require the
@@ -1495,7 +1609,6 @@ def record_package_result(
             artifacts_exist=True,
             artifacts_preserved=True,
         )
-    legacy_result = isinstance(package_result, dict) and "contract_version" not in package_result
     validated = validate_publish_pack_result(
         package_result,
         target_platforms=None if legacy_result else package_input["target_platforms"],
@@ -1829,7 +1942,7 @@ def respond_package(
     store = RunStore(runs_root)
     task_key = _task_key_from_record(store, task_record)
     state = store.get_task(task_key)
-    decision = _normalize_decision(decision)
+    decision = _normalize_package_decision(decision)
     if (
         (state["state"] == "package_approved"
          or (state["state"] == "blocked" and state.get("blocked_resume_state") == "package_approved"))
@@ -1916,6 +2029,14 @@ def respond_package(
             artifacts_preserved=True,
         )
     version, package, _ = store.latest_version(task_key, "package")
+    pending_request = _package_request_path(
+        store, task_key, package.get("based_on_draft_version"), version + 1)
+    if pending_request.exists() or pending_request.is_symlink():
+        raise SlimRuntimeError(
+            "SLIM_PACKAGE_RESPONSE_INVALID", "content_koubo_slim",
+            detail="a package revision was requested but its new version has not been generated",
+            workflow_stage="等待你确认并保存", run_exists=True,
+            artifacts_exist=True, artifacts_preserved=True)
     is_v2 = package.get("contract_version") == "content-koubo-slim-package-v2"
     content = validate_publish_pack_result(
         package.get("content"), target_platforms=package.get("target_platforms") if is_v2 else None
@@ -2510,7 +2631,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_runs_root_argument(respond_package_parser)
     respond_package_parser.add_argument("--task-record", required=True)
     respond_package_parser.add_argument(
-        "--decision", required=True, type=_normalize_decision, choices=PACKAGE_CHOICES
+        "--decision", required=True, type=_normalize_package_decision, choices=PACKAGE_CHOICES
     )
     respond_package_parser.add_argument("--feedback")
     respond_package_parser.add_argument("--selected-cover-title")
