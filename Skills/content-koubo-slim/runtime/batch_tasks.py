@@ -140,22 +140,41 @@ def start_request(prepare, request, *, output_count=1, plan_path=None):
 
 
 def _verified_pair(store, key):
-    version, _, _ = store.latest_version(key, "draft")
-    receipt = store.read_fixed_json(key, f"saved_pair_v{version}.json")
+    draft_version, _, _ = store.latest_version(key, "draft")
+    package_version, package, _ = store.latest_version(key, "package")
+    is_v2 = package.get("contract_version") == "content-koubo-slim-package-v2"
+    if package.get("based_on_draft_version") != draft_version:
+        return False
+    if is_v2:
+        receipt_path = store.run_directory(key) / "artifacts" / f"saved_release_d{draft_version}_p{package_version}.json"
+    else:
+        receipt_path = store.run_directory(key) / "artifacts" / f"saved_pair_v{draft_version}.json"
+    if receipt_path.is_symlink() or not receipt_path.is_file():
+        return False
+    receipt = store._read_json(receipt_path)
     frozen = store.read_task_input(key)
     if frozen.get("backend_type") == "feishu":
         from .feishu_binding import space_from_binding
         from .feishu_source import FeishuDocument
-        from .feishu_save import verify_saved_feishu_pair
+        from .feishu_save import verify_saved_feishu_pair, verify_saved_feishu_package_revision
         space = space_from_binding({"locator": {"knowledge_base_ref": frozen["vault_root_resolved"]}})
         manifest = load_manifest(FeishuDocument(space, frozen["manifest_path_resolved"]), expected_client_id=frozen["client_id"])
         if manifest.manifest_sha256 != frozen.get("manifest_sha256"):
             return False
+        receipt_dir = store.run_directory(key) / "feishu-save" / (
+            f"d{draft_version}-p{package_version}" if is_v2 else f"v{draft_version}")
+        if is_v2 and (receipt_dir / "feishu-package-save.json").is_file():
+            return verify_saved_feishu_package_revision(
+                output_root=resolve_asset_root(space, manifest, "output"),
+                output_template=manifest.output_template, receipt_dir=receipt_dir,
+                expected_result=receipt, draft_version=draft_version,
+                package_version=package_version,
+                item_suffix=save_suffix(frozen.get("batch_item")))
         return verify_saved_feishu_pair(
             output_root=resolve_asset_root(space, manifest, "output"),
             output_template=manifest.output_template,
-            receipt_dir=store.run_directory(key) / "feishu-save" / f"v{version}",
-            expected_result=receipt, draft_version=version,
+            receipt_dir=receipt_dir, expected_result=receipt,
+            draft_version=draft_version, package_version=package_version if is_v2 else 1,
             item_suffix=save_suffix(frozen.get("batch_item")))
     from .client_registry import _reject_reparse
     _reject_reparse(Path(frozen["vault_root_resolved"]))

@@ -4,10 +4,10 @@
   },
   "package": {
     "id": "content-koubo-slim",
-    "version": "1.3.0"
+    "version": "1.4.0"
   },
   "runtime": {
-    "file_count": 50,
+    "file_count": 55,
     "files": [
       {
         "bytes": 7254,
@@ -80,31 +80,66 @@
         "skill": "content-koubo-context-retriever"
       },
       {
-        "bytes": 5296,
+        "bytes": 5329,
         "mode": "0644",
         "path": "Skills/content-koubo-publish-pack/SKILL.md",
-        "sha256": "ac90f5748546886723ae1d1181ac4cc3a8878fd214ecf573ccab4b5cb6082a02",
+        "sha256": "87c59dc033c05a90a2081b9c897fbc2eae0477d42f946483775929187ce2aead",
         "skill": "content-koubo-publish-pack"
       },
       {
-        "bytes": 276,
+        "bytes": 343,
         "mode": "0644",
         "path": "Skills/content-koubo-publish-pack/agents/openai.yaml",
-        "sha256": "26626bfe547d9dba0b0a59ddc8001b01a1af3351a99408853f8704edb5f795a7",
+        "sha256": "f2f0aa1183370bd3058aa0d2945c42f4f968f41dd3c36b0e7cd197245c57c55c",
         "skill": "content-koubo-publish-pack"
       },
       {
-        "bytes": 16809,
+        "bytes": 1633,
+        "mode": "0644",
+        "path": "Skills/content-koubo-publish-pack/references/douyin.md",
+        "sha256": "6bd08374e32353a809d4314873379d6665a0ec9fcd9e3005e658e82775cc14fd",
+        "skill": "content-koubo-publish-pack"
+      },
+      {
+        "bytes": 1257,
+        "mode": "0644",
+        "path": "Skills/content-koubo-publish-pack/references/wechat-channels.md",
+        "sha256": "35988bd8f89cbd5281960ef6c92d7575795541e91e13de02ec1918249880286b",
+        "skill": "content-koubo-publish-pack"
+      },
+      {
+        "bytes": 1429,
+        "mode": "0644",
+        "path": "Skills/content-koubo-publish-pack/references/xiaohongshu.md",
+        "sha256": "3b78c91d558fa1d08caa1aa33ca4ad7dc2b84a8c6e71f77831691e530e9c0fe3",
+        "skill": "content-koubo-publish-pack"
+      },
+      {
+        "bytes": 2059,
+        "mode": "0644",
+        "path": "Skills/content-koubo-publish-pack/schemas/publish-pack-input-v2.schema.json",
+        "sha256": "2c1570908f878801805c0661ae52b4f454129f7b1b2e9d15bf7434ffba3d232c",
+        "skill": "content-koubo-publish-pack"
+      },
+      {
+        "bytes": 1387,
+        "mode": "0644",
+        "path": "Skills/content-koubo-publish-pack/schemas/publish-pack-result-v2.schema.json",
+        "sha256": "bfe0ae49d50f7fdde2ab3a3471696e1d06c5568f2cad820d0726fcda09746512",
+        "skill": "content-koubo-publish-pack"
+      },
+      {
+        "bytes": 18549,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/SKILL.md",
-        "sha256": "c46d7f78fce08de66cd7c05b1af9f7537c2483ef797236b9470c4e975da839b3",
+        "sha256": "c3408a2a08872f8477060ec7fa8b66e4ae3f52d80eb9bd695310a2b590969f6c",
         "skill": "content-koubo-slim"
       },
       {
-        "bytes": 795,
+        "bytes": 608,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/agents/openai.yaml",
-        "sha256": "09637f843505d2d12ff17bf5e644346fb345ea8c285f88ab03b24e1f51c46b31",
+        "sha256": "c8a8c76a8878d07bfaca0793d878508ce46f08b75e4b3fc454aa87536fcddbcd",
         "skill": "content-koubo-slim"
       },
       {
@@ -115,10 +150,10 @@
         "skill": "content-koubo-slim"
       },
       {
-        "bytes": 3764,
+        "bytes": 4027,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/references/feishu-backend.md",
-        "sha256": "8a6658bb2f9aad89983c9d4405cb92b8c210efbd549adaba54fdc9f76d15031a",
+        "sha256": "ed718617f84d8981804b897005e37e6ca2b5d1f82a16755269642f04cc0bc9ed",
         "skill": "content-koubo-slim"
       },
       {
@@ -129,10 +164,10 @@
         "skill": "content-koubo-slim"
       },
       {
-        "bytes": 1863,
+        "bytes": 2159,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/references/local-save-recovery.md",
-        "sha256": "41b423b789a967d5b6cd6536dbe3a5233ab40ed383e0746751ea9848acce4763",
+        "sha256": "bb20755be748ccf668181a861d4269a2f0b42e81d84c4d2258e2949a4de3e280",
         "skill": "content-koubo-slim"
       },
       {
@@ -150,10 +185,10 @@
         "skill": "content-koubo-slim"
       },
       {
-        "bytes": 10587,
+        "bytes": 11808,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/runtime/batch_tasks.py",
-        "sha256": "61cbb21093afa3156c5e3e68a6affa3bfece07f68af44822b1551536c2bf05cc",
+        "sha256": "02543b5a88b45555df363609027162780b8048edc0cf0bcac196ba9b238aee86",
         "skill": "content-koubo-slim"
       },
       {
@@ -178,10 +213,10 @@
         "skill": "content-koubo-slim"
       },
       {
-        "bytes": 9274,
+        "bytes": 9292,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/runtime/error_model.py",
-        "sha256": "c1dc3258be39c6b36d81d11d90733bb3ecc6a0eecd70c7ac93a4d6115f833516",
+        "sha256": "4b7b479048b165194b0d3a45b60af5c41e66856e3e5554c77053b5890288cb89",
         "skill": "content-koubo-slim"
       },
       {
@@ -206,10 +241,10 @@
         "skill": "content-koubo-slim"
       },
       {
-        "bytes": 13106,
+        "bytes": 22359,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/runtime/feishu_save.py",
-        "sha256": "30e55de04f28e22d7b50b36e2a5938ad9fef1f0b22ff75b9a6ea0fe7672c136f",
+        "sha256": "ae00023e93446b89b0074d433c1b5e121e923012634635a4356dcdf4511dd338",
         "skill": "content-koubo-slim"
       },
       {
@@ -220,10 +255,10 @@
         "skill": "content-koubo-slim"
       },
       {
-        "bytes": 5823,
+        "bytes": 12261,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/runtime/local_save_receipt.py",
-        "sha256": "5022b1ea9bfb3e867d26cc1b6334a28ab14365ca76713ce80bd6424ed218cbec",
+        "sha256": "d44b9b263ee4ab1f51b1d5259618825673155418f97800c06a50991dd0564340",
         "skill": "content-koubo-slim"
       },
       {
@@ -241,17 +276,17 @@
         "skill": "content-koubo-slim"
       },
       {
-        "bytes": 45123,
+        "bytes": 49334,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/runtime/schema_validation.py",
-        "sha256": "ed8977c666d0f7a140b6dc0c9805848f9117a7c573810e51247d38f1a462f140",
+        "sha256": "2a4293c76f364c4d011df265086d405957b159e61e1a0b21b8d7cbe5e37cc71e",
         "skill": "content-koubo-slim"
       },
       {
-        "bytes": 2929,
+        "bytes": 2948,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/runtime/state_machine.py",
-        "sha256": "80bbd32543473fe71e28efb5ea8a0b36d9052652c0cd90485d19a7276f9df602",
+        "sha256": "d5207fd64d9777ec55408d3d566cac8f6c83c25165c01db9861ddb1843f6c3b8",
         "skill": "content-koubo-slim"
       },
       {
@@ -262,10 +297,10 @@
         "skill": "content-koubo-slim"
       },
       {
-        "bytes": 7770,
+        "bytes": 9053,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/runtime/vault_save.py",
-        "sha256": "f24e260ef9885c957aa64dd372ea478442088b61c61923f3628f169b0b367044",
+        "sha256": "0c65061a10c78d23ec71e93040b1e25c3ef9aa7d78c2314c768dda1bad525843",
         "skill": "content-koubo-slim"
       },
       {
@@ -311,10 +346,10 @@
         "skill": "content-koubo-slim"
       },
       {
-        "bytes": 99892,
+        "bytes": 124064,
         "mode": "0644",
         "path": "Skills/content-koubo-slim/scripts/content_koubo_slim.py",
-        "sha256": "8314494b411fd0891931911085948be2107f55a9be172285c355a4d2727580e4",
+        "sha256": "79ce316341423ffe28169c49d9498ef91780d53b836d750c4b99120636522ca9",
         "skill": "content-koubo-slim"
       },
       {
@@ -369,7 +404,7 @@
       "content-koubo-slim",
       "content-koubo-writer"
     ],
-    "tree_sha256": "430166cbb8addb1f026a3ab54fe787e727e8ff6b143cadf0347538a71a1239ca"
+    "tree_sha256": "2330ea24a078e9efe585eb72e29bdf5024ef300e9abdf5326db67d5f7d01af7c"
   },
   "schema_version": "content-koubo-slim-release-v1",
   "source": {

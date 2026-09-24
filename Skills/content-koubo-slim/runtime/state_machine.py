@@ -41,7 +41,7 @@ TRANSITIONS = {
         "package_pending",
         "package_approved",
     },
-    "saved": {"draft_pending"},
+    "saved": {"draft_pending", "package_pending"},
     "abandoned": set(),
 }
 

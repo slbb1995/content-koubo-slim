@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "content-koubo-publish-pack/result-v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "platforms", "cover_texts", "recommended_cover_text"],
+  "properties": {
+    "contract_version": {"const": "content-koubo-publish-pack-result-v2"},
+    "platforms": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 3,
+      "additionalProperties": false,
+      "properties": {
+        "douyin": {"$ref": "#/$defs/platform"},
+        "xiaohongshu": {"$ref": "#/$defs/platform"},
+        "wechat_channels": {"$ref": "#/$defs/platform"}
+      }
+    },
+    "cover_texts": {
+      "type": "array",
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "recommended_cover_text": {"type": ["string", "null"]}
+  },
+  "$defs": {
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "publish_copy", "tags"],
+      "properties": {
+        "title": {"type": "string", "minLength": 1},
+        "publish_copy": {"type": "string", "minLength": 1},
+        "tags": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^#[^#\\s]+$"}
+        }
+      }
+    }
+  }
+}

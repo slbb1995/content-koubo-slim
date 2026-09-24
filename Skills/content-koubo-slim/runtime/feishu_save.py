@@ -44,7 +44,8 @@ def _persist(path, state):
 
 def save_feishu_pair(*, output_root: FeishuRoot, output_template, client_id,
                      selected_publish_title, oral_body, package_markdown,
-                     receipt_dir: Path, now=None, draft_version=1, item_suffix=None) -> dict:
+                     receipt_dir: Path, now=None, draft_version=1, package_version=1,
+                     item_suffix=None) -> dict:
     """Return token refs and SHA256 only after both remote bodies match."""
     lock = None
     try:
@@ -66,10 +67,13 @@ def save_feishu_pair(*, output_root: FeishuRoot, output_template, client_id,
 
         root = check_node(client.get_node(output_root.token), token=output_root.token)
         bodies = [canonical_markdown(oral_body), canonical_markdown(package_markdown)]
-        titles = [stem + '-口播稿', stem + '-配套文案']
+        package_suffix = '' if package_version == 1 else f'-第{package_version}版'
+        titles = [stem + '-口播稿', stem + '-配套文案' + package_suffix]
         request = dict(space_id=space_id, root=root['node_token'],
                        draft_version=draft_version, item_suffix=item_suffix,
                        client_id=client_id, titles=titles, sha=[_sha(body) for body in bodies])
+        if package_version != 1:
+            request['package_version'] = package_version
         receipt_dir = Path(receipt_dir)
         if receipt_dir.is_symlink() or any(p.is_symlink() for p in receipt_dir.parents):
             _fail('Receipt directory must not use symlinks')
@@ -194,8 +198,150 @@ def save_feishu_pair(*, output_root: FeishuRoot, output_template, client_id,
             lock_path.unlink()
 
 
+def save_feishu_package_revision(*, output_root: FeishuRoot, output_template, client_id,
+                                 archive_title, package_markdown, verified_oral,
+                                 receipt_dir: Path, draft_version, package_version,
+                                 item_suffix=None, now=None) -> dict:
+    """Verify the saved oral document and create one new package document."""
+    from .feishu_source import assert_below
+    lock = None
+    try:
+        if type(package_version) is not int or package_version < 2:
+            _fail('package-only revision requires package_version >= 2')
+        if output_root.logical_name != 'output' or not isinstance(package_markdown, str) or not package_markdown.strip():
+            _fail('invalid package-only save request')
+        client, space_id = output_root.client, output_root.space_id
+        oral_ref = verified_oral.get('oral_ref')
+        oral_sha = verified_oral.get('oral_sha256')
+        if not isinstance(oral_ref, str) or not isinstance(oral_sha, str):
+            _fail('saved oral acknowledgement is incomplete')
+        oral_node = assert_below(output_root.space, oral_ref, output_root.token)
+        oral_title = oral_node.get('title')
+        oral_body = canonical_markdown(client.fetch_markdown(oral_node['obj_token']))
+        if oral_sha not in {_sha(body) for body in document_body_variants(oral_body, oral_title)}:
+            _fail('saved oral document no longer matches its acknowledgement')
+        parent = oral_node.get('parent_node_token')
+        if not isinstance(parent, str) or not parent:
+            _fail('saved oral document has no authorized parent')
+        oral_matches = [n for n in client.list_children(space_id, parent) if n.get('title') == oral_title]
+        if len(oral_matches) != 1 or oral_matches[0].get('node_token') != oral_ref:
+            _fail('saved oral document is not the unique child at its saved location')
+        receipt_dir = Path(receipt_dir)
+        if receipt_dir.is_symlink() or any(p.is_symlink() for p in receipt_dir.parents):
+            _fail('Receipt directory must not use symlinks')
+        receipt_dir.mkdir(parents=True, exist_ok=True)
+        lock_path = receipt_dir / 'feishu-package-save.lock'; lock = lock_path.open('x')
+        path = receipt_dir / 'feishu-package-save.json'
+        state = json.loads(path.read_text(encoding='utf-8')) if path.exists() else None
+        timestamp = datetime.fromisoformat(state['request']['timestamp']) if state else (now or datetime.now().astimezone())
+        stem = _versioned_stem(archive_title, draft_version, item_suffix)
+        title = stem + f'-配套文案-第{package_version}版'
+        body = canonical_markdown(package_markdown)
+        request = dict(space_id=space_id, root=output_root.token, output_template=output_template,
+            client_id=client_id, timestamp=timestamp.isoformat(), parent=parent,
+            draft_version=draft_version, package_version=package_version, item_suffix=item_suffix,
+            oral_ref=oral_ref, oral_sha256=oral_sha, title=title, package_sha256=_sha(body))
+        if state is None:
+            state = dict(request=request, entry={'status':'ready'}, result=None)
+            _persist(path, state)
+        elif not isinstance(state, dict) or state.get('request') != request:
+            _fail('package revision receipt belongs to different approved content')
+        entry = state['entry']
+        if entry.get('status') == 'ready' and 'refs' not in entry:
+            existing = [n for n in client.list_children(space_id, parent) if n.get('title') == title]
+            if existing:
+                _fail('unacknowledged package revision title already exists')
+            entry['status'] = 'creating'
+            _persist(path, state)  # durable mutation intent before the remote create
+            try:
+                refs = client.create_document(parent, title, body)
+            except Exception as exc:
+                if getattr(exc, 'received_refs', None):
+                    entry.update(status='received', refs=exc.received_refs); _persist(path, state)
+                _fail('Create stopped; preserve receipt for reconciliation: ' + str(exc))
+            entry.update(status='received', refs=refs); _persist(path, state)
+        if not isinstance(entry.get('refs'), dict):
+            _fail('unknown package revision create result requires manual reconciliation; never recreate')
+        refs = entry['refs']
+        node = assert_below(output_root.space, refs.get('node_token') or refs.get('obj_token'), output_root.token)
+        if (node.get('parent_node_token') != parent or node.get('title') != title
+                or node.get('obj_token') != refs.get('obj_token')):
+            _fail('package revision identity changed')
+        matches = [n for n in client.list_children(space_id, parent) if n.get('title') == title]
+        if len(matches) != 1 or matches[0].get('node_token') != node.get('node_token'):
+            _fail('package revision is not the unique saved child')
+        actual = canonical_markdown(client.fetch_markdown(node['obj_token']))
+        if request['package_sha256'] not in {_sha(item) for item in document_body_variants(actual, title)}:
+            _fail('package revision readback does not match approved content')
+        entry['status'] = 'verified'; entry['refs'] = node
+        result = dict(oral_ref=oral_ref, package_ref=node['node_token'], oral_sha256=oral_sha,
+            package_sha256=request['package_sha256'], publish_status='not_requested')
+        state['result'] = result; _persist(path, state)
+        return result
+    except SlimRuntimeError:
+        raise
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        _fail('Feishu package revision save stopped: ' + str(exc))
+    finally:
+        if lock is not None:
+            lock.close(); lock_path.unlink()
+
+
+def verify_saved_feishu_package_revision(*, output_root, output_template, receipt_dir,
+                                         expected_result, draft_version,
+                                         package_version, item_suffix):
+    """Read-only verification for the latest package-only Feishu release."""
+    from .feishu_source import assert_below
+    path = Path(receipt_dir) / 'feishu-package-save.json'
+    if path.is_symlink() or not path.is_file():
+        return False
+    state = json.loads(path.read_text(encoding='utf-8'))
+    request = state.get('request')
+    entry = state.get('entry')
+    if (not isinstance(request, dict) or not isinstance(entry, dict)
+            or state.get('result') != expected_result
+            or expected_result.get('publish_status') != 'not_requested'
+            or output_root.logical_name != 'output'
+            or request.get('space_id') != output_root.space_id
+            or request.get('root') != output_root.token
+            or request.get('output_template') != output_template
+            or request.get('draft_version') != draft_version
+            or request.get('package_version') != package_version
+            or request.get('item_suffix') != item_suffix
+            or entry.get('status') != 'verified'
+            or not isinstance(entry.get('refs'), dict)):
+        return False
+    client = output_root.client
+    oral = assert_below(output_root.space, request['oral_ref'], output_root.token)
+    parent = request.get('parent')
+    if (oral.get('parent_node_token') != parent
+            or expected_result.get('oral_ref') != oral.get('node_token')):
+        return False
+    oral_actual = canonical_markdown(client.fetch_markdown(oral['obj_token']))
+    if (request.get('oral_sha256') != expected_result.get('oral_sha256')
+            or request['oral_sha256'] not in {_sha(body) for body in document_body_variants(oral_actual, oral.get('title'))}):
+        return False
+    refs = entry['refs']
+    package = assert_below(output_root.space, refs.get('node_token'), output_root.token)
+    if (package.get('parent_node_token') != parent
+            or package.get('title') != request.get('title')
+            or package.get('obj_token') != refs.get('obj_token')
+            or expected_result.get('package_ref') != package.get('node_token')):
+        return False
+    matches = [node for node in client.list_children(output_root.space_id, parent)
+               if node.get('title') == request['title']]
+    if len(matches) != 1 or matches[0].get('node_token') != package.get('node_token'):
+        return False
+    package_actual = canonical_markdown(client.fetch_markdown(package['obj_token']))
+    return (request.get('package_sha256') == expected_result.get('package_sha256')
+            and request['package_sha256'] in {_sha(body) for body in document_body_variants(package_actual, request['title'])}
+            and oral.get('node_token') != package.get('node_token')
+            and oral.get('obj_token') != package.get('obj_token'))
+
+
 def verify_saved_feishu_pair(*, output_root, output_template, receipt_dir,
-                            expected_result, draft_version, item_suffix):
+                            expected_result, draft_version, item_suffix,
+                            package_version=1):
     """Read-only batch status verification; never creates or rewrites receipts."""
     from .feishu_source import assert_below
     from .vault_save import _reject_reparse
@@ -206,6 +352,7 @@ def verify_saved_feishu_pair(*, output_root, output_template, receipt_dir,
     if (output_root.logical_name != 'output' or request['space_id'] != output_root.space_id
             or request['root'] != output_root.token or request['output_template'] != output_template
             or request.get('draft_version') != draft_version or request.get('item_suffix') != item_suffix
+            or request.get('package_version', 1) != package_version
             or state.get('result') != expected_result
             or expected_result.get('publish_status') != 'not_requested'):
         return False
