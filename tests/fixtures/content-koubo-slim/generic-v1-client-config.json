@@ -1,0 +1,19 @@
+{
+  "type": "content_v1_client_config",
+  "contract_version": "1.1",
+  "client_id": "GENERIC-CLIENT-001",
+  "asset_roots": {
+    "knowledge": "knowledge-data",
+    "method": "method-data",
+    "profile": "profile-data"
+  },
+  "output_root": "output-data",
+  "default_platform": "short_video",
+  "profile_aliases": {
+    "generic-speaker": "GENERIC-PROFILE-001"
+  },
+  "method_selection_policy": {
+    "fill_unrelated": false
+  },
+  "save_directory_template": "output-data/finished/{profile_display_name}/weekly"
+}

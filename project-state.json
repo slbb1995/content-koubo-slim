@@ -1,0 +1,157 @@
+{
+  "schema_version": "content-v2-slim-project-state-v1",
+  "updated_at": "2026-08-20T08:43:36+0800",
+  "master_spec": {
+    "path": "CONTENT-V2-SLIM-FULL-CYCLE-SPEC.md",
+    "source_path": "/Users/Zhuanz/Downloads/Content-V2-Slim-全周期开发与迁移-SPEC-架构复核定稿版.md",
+    "sha256": "75f63c320390298af050475d7b859c764b56130e520f7b231389c28d795eacfa"
+  },
+  "phase": {
+    "current": "P7",
+    "execution_status": "completed",
+    "review_status": "passed",
+    "passed_gates": ["P0", "P1", "P2", "P3", "P4", "P5", "P6", "P7"],
+    "next": "mainline_pr_review_or_release_decision"
+  },
+  "factory": {
+    "path": "/Users/Zhuanz/Content-Workflow-Skills",
+    "repository": "slbb1995/content-workflow-skills",
+    "branch": "feature/content-v2-slim",
+    "branch_base": "e5676f5686edded228c20006777ca11de21b93f8",
+    "p0_artifact_commit": "b9d47808074a3265a48b35aa7a61eaa8f142f766",
+    "frozen_v1_code_baseline": "6669b1055c8f14785c63739483669a3e720b5a83",
+    "v1_audit_commit": "e5676f5686edded228c20006777ca11de21b93f8",
+    "remote_main": "e6179841c10be081453e7f26038f134ee377cb20",
+    "ancestry": "remote_main -> frozen_v1_code_baseline -> v1_audit_commit"
+  },
+  "protected_locations": {
+    "host": {
+      "root": "/Users/Zhuanz/.codex",
+      "state_path": "/Users/Zhuanz/.codex/.content-workflow/state.json",
+      "state_sha256": "00e525875264966ec2275e96f967a719afac9ca53dc4c76034f3cd09ceeb1e30",
+      "operation_counter": 13,
+      "release_history_count": 13,
+      "current_release_tree_sha256": "8f0b2ef266476e81e2f7315f701b3e3e8af6b61a48bb27a7008dcec48a1ab94e",
+      "doctor_exit_code": 2,
+      "doctor_code": "INSTALLED_TREE_DRIFT",
+      "modified_by_p0": false
+    },
+    "client_rc": {
+      "path": "/Users/Zhuanz/Baoxian-Skills-Shandong-Xingzhiyuan",
+      "branch": "codex/rc11-local-validation",
+      "head": "dcae02cc2c26aa96576a7c3693b08b2af95b1895",
+      "worktree": "clean",
+      "remote_main": "372109025c6edacbc36e65ccbcce59bbc6a30005",
+      "version": "0.10.0-rc.11",
+      "verification_status": "verified_local_rc_not_publishable",
+      "repo_tree_sha256": "fcb106d35f3f0635e6ebfe4c955f42690f099f15294de29bd46da437f2a2749f",
+      "modified_by_p0": false
+    },
+    "client_vault": {
+      "path": "/Users/Zhuanz/Baoxian-Client-Vault",
+      "branch": "codex/rc11-local-validation",
+      "head": "26efcad6e1370daf006df4d638a625e89c82bfb7",
+      "remote_main": "5ef1c64176d09db1be3f7a7270bb1f22b584c444",
+      "remote_visibility": "PRIVATE",
+      "preexisting_modified_files": [
+        "04-内容方法库/同行完整拆解/WIKI04-SRC-20260719-009-保险销售训练的清单拆解法.md"
+      ],
+      "modified_by_p0": false
+    },
+    "legacy_runs": {
+      "root": "/Users/Zhuanz/Documents/Codex/Content-V1-Runs",
+      "audit_evidence": "audits/content-v1-slim-2026-08-16/evidence/runs.json",
+      "verified_unchanged": true,
+      "run_file_counts": {
+        "run-20260815T052619.492277Z-d4f275a37856eb0e": 24,
+        "run-20260815T053222.223213Z-f285214f343c4286": 24,
+        "run-20260815T053625.004765Z-ce92c48b20ff70e8": 26
+      },
+      "modified_by_p0": false
+    }
+  },
+  "known_risks": [
+    {
+      "code": "CLIENT_VAULT_VISIBILITY_RESTORED",
+      "status": "resolved_by_user_during_p0",
+      "detail": "The first live P0 check saw PUBLIC; the user restored PRIVATE before P0 resumed. P0 did not change repository permissions."
+    },
+    {
+      "code": "LEGACY_HOST_DOCTOR_RED",
+      "status": "preexisting_unchanged",
+      "detail": "Host doctor remains INSTALLED_TREE_DRIFT; P0 did not repair it."
+    },
+    {
+      "code": "CLIENT_VAULT_PREEXISTING_DIRTY_FILE",
+      "status": "preexisting_unchanged",
+      "detail": "One 04 business asset modification predates P0 and was not touched."
+    },
+    {
+      "code": "FACTORY_PRUNABLE_WORKTREE_REGISTRATIONS",
+      "status": "preexisting_unchanged",
+      "detail": "Three temporary worktree registrations are prunable; P0 did not prune them."
+    },
+    {
+      "code": "LEGACY_V1_TEST_BASELINE_RED",
+      "status": "historical_not_rerun",
+      "detail": "The V1 audit recorded 7 failures and 23 errors; P0 does not repair or relabel this baseline."
+    }
+  ],
+  "p0_changes": {
+    "production_skill_changes": 0,
+    "protected_location_changes": 0,
+    "builds": 0,
+    "installs": 0,
+    "remote_branch": "origin/feature/content-v2-slim",
+    "p0_artifact_commit": "b9d47808074a3265a48b35aa7a61eaa8f142f766",
+    "real_content_runs": 0
+  },
+  "p7_changes": {
+    "build_source_commit": "2d77d82cdeaccdb2c0a3db63efe8b4eecb22cc0a",
+    "candidate_version": "0.11.0-rc.3",
+    "double_build_byte_identical": true,
+    "package_skill_count": 5,
+    "package_file_count": 34,
+    "legacy_v1_runtime_dependency_count": 0,
+    "manifest_sha256": "ed4383e05f982e973ef84735d5e81043d060d11376c0fcb3f178b6ec3538aae9",
+    "runtime_tree_sha256": "23b09c5e101d160163293cd3ada0fc00f9fd7e702e06db8b75bef3f2447ae68e",
+    "release_tree_sha256": "0ff21ed291bc190c4b0c4720e246a156e3a06486ebb28a6fbdd5e78a0810b0a5",
+    "real_host_status": "healthy",
+    "real_host_backup": "/Users/Zhuanz/.codex/backups/content-v2-slim-p7-rc3-20260819T164436+0800",
+    "legacy_host_state_sha256_unchanged": true,
+    "legacy_host_doctor": "INSTALLED_TREE_DRIFT",
+    "client_registry_migrated": true,
+    "client_manifest_migrated": true,
+    "client_manifest_sha256": "a189f778b5702ebf6a743b49958eeac1e6a0f2b53336a61dfdfdac41d556dd59",
+    "client_version_binding_sha256": "124f4a6459f6b4a2ceeb96ef00226b61b14dd7df680520cf035a03910ad65fac",
+    "client_rc_local_candidate": "uncommitted_not_pushed",
+    "client_vault_01_05_modified_by_p7": false,
+    "machine_rehearsal_run_id": "run-20260819T014658.412810Z-89525c84",
+    "machine_rehearsal_human_confirmation_points": 0,
+    "prior_human_repair_run_id": "run-20260819T042707.131601Z-e6c8ae07",
+    "prior_human_gate_evidence_path": "designs/content-v2-slim/p7-human-gate-evidence.md",
+    "prior_human_gate_evidence_sha256": "cf1d8154a680efb1d7a17a69ffa9ecf68040293d31bdee03fd19f0e1f6ba18b5",
+    "real_run_id": "run-20260819T084554.071263Z-622cd1b3",
+    "real_run_state": "saved",
+    "human_confirmation_points": 3,
+    "human_gate_raw_session_ref": "codex-session:01a01819-2918-7882-b846-2a4044c8c840",
+    "human_gate_evidence_path": "designs/content-v2-slim/p7-rc3-human-gate-evidence.md",
+    "human_gate_evidence_sha256": "581b00ed960c15385f0e453f94f1f828bd2823de19646357690d38323d80ff57",
+    "human_gate_constraint_source_sha256": "4c5c2505f75563163d76b3b6f4b4e828f67b4aee0119105f2154f610df732874",
+    "installed_content_slim_sha256": "4c5c2505f75563163d76b3b6f4b4e828f67b4aee0119105f2154f610df732874",
+    "human_gate_constraint_delivery": "installed_rc3_verified",
+    "saved_markdown_files": 2,
+    "saved_oral_sha256": "70efb55a08656355aa11b8edab8f3775566619e5eecfec36940cff97094bafce",
+    "saved_companion_sha256": "e0dc512d6b6462226d01ffbcb9208876a2a94e122d14f886575b47321cbb34b7",
+    "publish_status": "not_requested",
+    "real_host_rollback_verified": true,
+    "final_review_verdict": "PASS",
+    "final_review_commit": "2c284b708be34f016057530195bee2d82fbd09c4",
+    "final_review_session_ref": "codex-session:01a0199f-2157-7a00-a66b-1b6034be53e9",
+    "mainline_pr_authorized": true,
+    "main_merged": false,
+    "tag_created": false,
+    "released": false,
+    "client_repository_pushed": false
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "schema_version": "workflow-skill-selection-v1",
+  "package_id": "content-mainline",
+  "source_root": "Skills",
+  "expected_skill_count": 14,
+  "skills": [
+    "content-benchmark-analyzer",
+    "content-distribution-pack",
+    "content-input-card",
+    "content-packet-assembler",
+    "content-reference-adapter",
+    "content-reference-ingest",
+    "content-request-normalizer",
+    "content-review",
+    "content-save",
+    "content-sop-v1",
+    "content-writer-ganhuo",
+    "content-writer-huati",
+    "content-writer-zhuanhua",
+    "viral-headline-creator"
+  ]
+}

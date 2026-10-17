@@ -1,0 +1,32 @@
+{
+  "receipt_version": "skill-creator-invocation-v1",
+  "recorded_at": "2026-08-18T16:38:25+0800",
+  "branch": "feature/content-v2-slim",
+  "head_before_invocation": "75bc61ab7e7c8d4a0e8ad2019c36fc9b5387cacf",
+  "skill_name": "content-writer",
+  "skill_creator_source": "~/.codex/skills/.system/skill-creator/SKILL.md",
+  "skill_creator_sha256": "da44c88f6b3845a8fa8c60792ec9a722110a55a9793c279757b48fefb11f819c",
+  "initializer_source": "~/.codex/skills/.system/skill-creator/scripts/init_skill.py",
+  "initializer_sha256": "f40cb8fafc34e2d5dbbb8b6b04297af128b70844b67bc9445ef69790e0cdb49e",
+  "command": "PYTHONDONTWRITEBYTECODE=1 python3 -B <skill-creator-root>/scripts/init_skill.py content-writer --path skills/content-mainline --resources references --interface display_name=Content Writer 口播正文 --interface short_description=按已确认方向和唯一上下文包生成、修改并确认可直接朗读的口播正文 --interface default_prompt=使用 $content-writer 按已确认方向和冻结主模式生成或修改口播正文，并停在正文确认。",
+  "exit_code": 0,
+  "created": [
+    "skills/content-mainline/content-writer/SKILL.md",
+    "skills/content-mainline/content-writer/agents/openai.yaml",
+    "skills/content-mainline/content-writer/references/"
+  ],
+  "initializer_output": "Skill 'content-writer' initialized successfully",
+  "design_card_sha256": "417223078b2eb2bfbdf4e08b9522e6d9c21d7b91cab8d37e59205c0ffb513f32",
+  "final_validation": {
+    "validator_source": "~/.codex/skills/.system/skill-creator/scripts/quick_validate.py",
+    "validator_sha256": "6cc9dc3199c935916cf6f73fcbbbb0e3bb1b58c8f5109fefa499978908164f51",
+    "exit_code": 0,
+    "output": "Skill is valid!",
+    "skill_sha256": "08f980e438b35c1f61e451562ac9c892a3045fc14514b6bbdce9c29b329135be",
+    "openai_yaml_sha256": "db32ad33134a21687183f76674d7ee71421821cd460e35f88ec0a7b123c33357",
+    "common_rules_sha256": "feaf43e07f2904b84bd5ed91c4e0c66cb2ad8cdf3149b00407fd4a85886f83e3",
+    "ganhuo_mode_sha256": "8f5a548145070e2b6d1f0f7bd993c1dc5673b64e9ef93811134271b9fa498b04",
+    "huati_mode_sha256": "bb61336aedc599767d907b7c2077c7ef5fd583fd5703fc4305b47f40468da9a3",
+    "zhuanhua_mode_sha256": "9e94184db844c4280317dd388c1e566e882db0e413e3a511d934092750f876ec"
+  }
+}

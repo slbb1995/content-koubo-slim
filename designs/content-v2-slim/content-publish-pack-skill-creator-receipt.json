@@ -1,0 +1,35 @@
+{
+  "receipt_version": "skill-creator-invocation-v1",
+  "recorded_at": "2026-08-18T17:40:47+0800",
+  "branch": "feature/content-v2-slim",
+  "head_before_invocation": "0b6da9040f49a6f989abd0837eb12737190f5823",
+  "skill_name": "content-publish-pack",
+  "skill_creator_source": "~/.codex/skills/.system/skill-creator/SKILL.md",
+  "skill_creator_sha256": "da44c88f6b3845a8fa8c60792ec9a722110a55a9793c279757b48fefb11f819c",
+  "initializer_source": "~/.codex/skills/.system/skill-creator/scripts/init_skill.py",
+  "initializer_sha256": "f40cb8fafc34e2d5dbbb8b6b04297af128b70844b67bc9445ef69790e0cdb49e",
+  "command": "PYTHONDONTWRITEBYTECODE=1 python3 -B <skill-creator-root>/scripts/init_skill.py content-publish-pack --path skills/content-mainline --interface display_name=Content Publish Pack --interface short_description=生成并确认口播标题、发布正文与标签 --interface default_prompt=Use $content-publish-pack to generate a complete publish pack from the confirmed spoken draft.",
+  "initializer_exit_code": 2,
+  "initializer_output": "Created the skill directory and SKILL.md template, then rejected the 17-character short_description because 25-64 characters are required.",
+  "created_before_validation_repair": [
+    "skills/content-mainline/content-publish-pack/SKILL.md"
+  ],
+  "validation_repair": {
+    "generator_source": "~/.codex/skills/.system/skill-creator/scripts/generate_openai_yaml.py",
+    "generator_sha256": "ddaf9abdfb3e762ed3c82571e9c607ce964188f49f2146281beb2cb8a553a93d",
+    "final_command": "PYTHONDONTWRITEBYTECODE=1 python3 -B <skill-creator-root>/scripts/generate_openai_yaml.py skills/content-mainline/content-publish-pack --interface display_name=配套文案生成 --interface short_description=根据已确认口播正文生成标题、发布正文、标签和推荐项 --interface default_prompt=Use $content-publish-pack to generate a complete publish pack from the confirmed spoken draft.",
+    "exit_code": 0,
+    "created": [
+      "skills/content-mainline/content-publish-pack/agents/openai.yaml"
+    ]
+  },
+  "design_card_sha256": "9283c61ccc6c8d3d1009b6d887667842654859be5a3f84fd86a720cd8660e0a7",
+  "final_validation": {
+    "validator_source": "~/.codex/skills/.system/skill-creator/scripts/quick_validate.py",
+    "validator_sha256": "6cc9dc3199c935916cf6f73fcbbbb0e3bb1b58c8f5109fefa499978908164f51",
+    "exit_code": 0,
+    "output": "Skill is valid!",
+    "skill_sha256": "4700eb94b6bf2f87e89144681845de7be727b21d2f24e84a75259c171afa8c96",
+    "openai_yaml_sha256": "4ed50ba528b3c15424fdc138abdf58f68ca63955d2d24d0c18b9352f5bd136db"
+  }
+}

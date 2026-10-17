@@ -1,0 +1,42 @@
+{
+  "receipt_version": "skill-creator-invocation-v1",
+  "recorded_at": "2026-08-18T14:52:09+0800",
+  "branch": "feature/content-v2-slim",
+  "head_before_invocation": "76d1723ad857fc6ad9a9743cec7f4385d6963889",
+  "skill_name": "content-context-retriever",
+  "skill_creator_source": "~/.codex/skills/skill-creator/SKILL.md",
+  "skill_creator_sha256": "a17383bfb1448637ac1f757ad891ddb9676fa30b0eff620200f0e1cbc0cc0d50",
+  "initializer_source": "~/.codex/skills/skill-creator/scripts/init_skill.py",
+  "initializer_sha256": "c178db24eb4146ea055f8b5a29ef80169616fc9ee1bef7f0d929c47a02b29ca1",
+  "command": "PYTHONDONTWRITEBYTECODE=1 python3 -B <skill-creator-root>/scripts/init_skill.py content-context-retriever --path skills/content-mainline --resources references --interface display_name=Content Context 客户资料装配 --interface short_description=复用已确认的内容方法，按需装配客户业务知识和讲述者资料，形成唯一上下文包 --interface default_prompt=使用 $content-context-retriever 将已批准方向和受控客户资料装配成唯一 Content Context Pack。",
+  "exit_code": 0,
+  "created": [
+    "skills/content-mainline/content-context-retriever/SKILL.md",
+    "skills/content-mainline/content-context-retriever/agents/openai.yaml",
+    "skills/content-mainline/content-context-retriever/references/"
+  ],
+  "initializer_output": "Skill 'content-context-retriever' initialized successfully",
+  "initial_failed_attempt": {
+    "exit_code": 1,
+    "reason": "short_description had 24 characters; the incomplete placeholder skeleton was removed before retry",
+    "output": "short_description must be 25-64 characters (got 24)"
+  },
+  "design_card_sha256": "d5df0047a67f5437f44a7e192788206d4a21f4f57fa7277c6b9072bb62f39008",
+  "final_generation": {
+    "generator_source": "~/.codex/skills/skill-creator/scripts/generate_openai_yaml.py",
+    "generator_sha256": "b8f6be33a9d72dd7a8da02e7a9fffea23dc79e94862e6dd6358b57a8899d8f73",
+    "exit_code": 0,
+    "output": "Created agents/openai.yaml"
+  },
+  "final_validation": {
+    "validator_source": "~/.codex/skills/skill-creator/scripts/quick_validate.py",
+    "validator_sha256": "6cc9dc3199c935916cf6f73fcbbbb0e3bb1b58c8f5109fefa499978908164f51",
+    "exit_code": 0,
+    "output": "Skill is valid!",
+    "skill_sha256": "7f31eac05d292f9b151db67e228dc618715ade3aa53dc154f2dac4a4285b09fa",
+    "openai_yaml_sha256": "daca9fff2432dc6b5b181833914a4b9b191fb40e82253beeaeb9f09c4ca9e885",
+    "reference_sha256": "83877e6cc85dc5d85a06f497db775269c4cc40c66ecb7c461f1c7ca6e996edcf",
+    "input_schema_sha256": "64c9172a01888a5fa59f688582bcc759834a4d3232744ae8c67235f04846a695",
+    "output_schema_sha256": "e84836a2cec2aad1bcf7fdc801fa510f25f8ea51652caa998b0437c54e7edb19"
+  }
+}

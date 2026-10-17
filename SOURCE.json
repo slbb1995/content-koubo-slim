@@ -1,8 +1,12 @@
 {
   "development": {
-    "commit": "f5099b37dd60e364294574a6a0c67d588b5652a8",
-    "repository": "https://github.com/slbb1995/content-workflow-skills",
-    "skill_root": "skills/content-mainline"
+    "repository": "https://github.com/slbb1995/content-koubo-slim",
+    "skill_root": "Skills"
+  },
+  "migration": {
+    "former_commit": "f5099b37dd60e364294574a6a0c67d588b5652a8",
+    "former_repository": "https://github.com/slbb1995/content-workflow-skills",
+    "history": "Complete former repository preserved in its private archived repository and local verified Git bundles; only oral source, tests and maintenance resources migrated here."
   },
   "payload": [
     {
@@ -19,15 +23,31 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "821227781e7578b7649e52019303b14e024d6c203842788a2721d3b4c8f68847"
+      "sha256": "c959fd8c085599ad6c7829d36e7160fdfa2e78a497489fcbb3b8ea871e5d0983"
+    },
+    {
+      "path": "CONTENT-V2-SLIM-FULL-CYCLE-SPEC.md",
+      "sha256": "75f63c320390298af050475d7b859c764b56130e520f7b231389c28d795eacfa"
     },
     {
       "path": "LICENSE",
       "sha256": "b991b6aab614a257f52a3820082f245c379ea574606f26b10fe7e12477a7cfe6"
     },
     {
+      "path": "MAINTENANCE.md",
+      "sha256": "e94d4a8e8f2528c012fef03808139b892dfbc84e8f00de9fcf1ed11731f579cd"
+    },
+    {
+      "path": "PHASE-P7.md",
+      "sha256": "e4b377ed09074956415a78faae4bc48d2e79e983c85da201003de975289a0ca3"
+    },
+    {
       "path": "README.md",
-      "sha256": "d31c3a76ff63935b2488c966a214ff59b7059db015a7f9ebbe0951bd88ce84d7"
+      "sha256": "99ada12f7b4d3ef526ff767b29aca015386becaefe1cc83d3c9fdc005169da15"
+    },
+    {
+      "path": "SLIM-COMPASS.md",
+      "sha256": "697fe6c7d3e7e209399de4099c673fd8bb50f6040109e9f7c46f2186967b55e3"
     },
     {
       "path": "Skills/content-koubo-analyzer/SKILL.md",
@@ -255,7 +275,83 @@
     },
     {
       "path": "VERSION",
-      "sha256": "acb57a7135b2d7d6e665f67f056e21353023b93835f54def1ae523bf76f1bfb3"
+      "sha256": "dfe7d71b3f428eb73ed853f8fded65e2986896e21d69f45ebf06bb623b450e14"
+    },
+    {
+      "path": "audits/p2-gate-review/content-analyzer-forward-evidence.json",
+      "sha256": "f186eaae3c9ddcaaa759347579a029382cd83357d6ecd9627ee5d44a829e1929"
+    },
+    {
+      "path": "designs/content-v2-slim/content-analyzer-design-card.md",
+      "sha256": "39be7b55f501c4047b2a95b41f10aea3dff3d0ab9fb3bfdde5f577486a312302"
+    },
+    {
+      "path": "designs/content-v2-slim/content-analyzer-skill-creator-receipt.json",
+      "sha256": "0f501ce94fd2ab257a2b411a8bb3c90d87fd2c634a29cfc8918f68244d976b50"
+    },
+    {
+      "path": "designs/content-v2-slim/content-context-retriever-design-card.md",
+      "sha256": "d5df0047a67f5437f44a7e192788206d4a21f4f57fa7277c6b9072bb62f39008"
+    },
+    {
+      "path": "designs/content-v2-slim/content-context-retriever-skill-creator-receipt.json",
+      "sha256": "0850fbff7d4586b5dcdd5505848ffd41cd7e0a684e3ace31a2c841de007f2f28"
+    },
+    {
+      "path": "designs/content-v2-slim/content-publish-pack-design-card.md",
+      "sha256": "9283c61ccc6c8d3d1009b6d887667842654859be5a3f84fd86a720cd8660e0a7"
+    },
+    {
+      "path": "designs/content-v2-slim/content-publish-pack-skill-creator-receipt.json",
+      "sha256": "347ef3c0ead3d4d5e8c72be3f66ac3b09a444cd21642a74bf6a969e98f65bcde"
+    },
+    {
+      "path": "designs/content-v2-slim/content-slim-design-card.md",
+      "sha256": "0ec149b5509f404a9df9fc03f14b2611e641a64ce5f5f1ad722377f57d2f68d6"
+    },
+    {
+      "path": "designs/content-v2-slim/content-slim-skill-creator-receipt.json",
+      "sha256": "effd26e171e5aee06dd074fb3a6b808a810e1a1571597844639277eafafb824f"
+    },
+    {
+      "path": "designs/content-v2-slim/content-writer-design-card.md",
+      "sha256": "417223078b2eb2bfbdf4e08b9522e6d9c21d7b91cab8d37e59205c0ffb513f32"
+    },
+    {
+      "path": "designs/content-v2-slim/content-writer-skill-creator-receipt.json",
+      "sha256": "f2261f8411959ebce38d8e428b47de41893bcf4bcfe423e4dc49c8d06585f071"
+    },
+    {
+      "path": "designs/content-v2-slim/p3-complexity-receipt.md",
+      "sha256": "b076af4fc7db2c248555f62e966326aabe7ac6cf0c5b5f4b5712ae18ef6dd937"
+    },
+    {
+      "path": "designs/content-v2-slim/p4-complexity-receipt.md",
+      "sha256": "9ee070fabb4edaf2de7b7bf45ecddb647c18992645e7a7928ce2064fbda44b73"
+    },
+    {
+      "path": "designs/content-v2-slim/p5-complexity-receipt.md",
+      "sha256": "038318d1232d4c5e28de2a7118ad2d6edbc09dfa4163d8f0547f330debf62b1e"
+    },
+    {
+      "path": "designs/content-v2-slim/p6-complexity-receipt.md",
+      "sha256": "898e459cc652d01448399b28beb56ad84fac9134450038d6cbaea53bd17a4fed"
+    },
+    {
+      "path": "designs/content-v2-slim/p7-complexity-receipt.md",
+      "sha256": "626ae18c0af8d03e636676373976dcf8a0710e08db1f0f95284abf7afb093370"
+    },
+    {
+      "path": "designs/content-v2-slim/p7-human-gate-evidence.md",
+      "sha256": "cf1d8154a680efb1d7a17a69ffa9ecf68040293d31bdee03fd19f0e1f6ba18b5"
+    },
+    {
+      "path": "designs/content-v2-slim/p7-rc3-human-gate-evidence.md",
+      "sha256": "581b00ed960c15385f0e453f94f1f828bd2823de19646357690d38323d80ff57"
+    },
+    {
+      "path": "designs/content-v2-slim/p7-release-install-evidence.md",
+      "sha256": "3bd22a6ec1d98942c90109727fe4fa02e9a391af642926494f5374e5028ce51f"
     },
     {
       "path": "examples/client-registry.example.json",
@@ -280,6 +376,18 @@
     {
       "path": "examples/three-platform-synthetic-samples.md",
       "sha256": "99b95e691cfc8a9deb7aa8fd8a8ba51b58e35d99185ceed02339b0d0e73e85c3"
+    },
+    {
+      "path": "packages/content-koubo-slim.json",
+      "sha256": "d7d3b06eada22360f99937eb537a9091765510f36f2d32002b7cc481950c1303"
+    },
+    {
+      "path": "packages/content-mainline.json",
+      "sha256": "1f2686d0362f893ec50dd69c61044fa607fee2cd9f348c593c955c244c4557bd"
+    },
+    {
+      "path": "project-state.json",
+      "sha256": "77914a79c644d0924a3c0b7a0e0fb804492c1624d6ebad4d14e20174c17ec9e0"
     },
     {
       "path": "public-methods/package.json",
@@ -390,6 +498,66 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
+      "path": "tests/fixtures/content-koubo-slim/generic-v1-client-config.json",
+      "sha256": "b38745873d912e00efc961549e7c831dcae73fd5eb7cbf0f591bd27d047cdaf2"
+    },
+    {
+      "path": "tests/p1/__init__.py",
+      "sha256": "0788b7391665c4967167978af827496802ccc057c8d403c128ed7bbc2edac1c2"
+    },
+    {
+      "path": "tests/p1/test_content_koubo_slim_p1.py",
+      "sha256": "312a5a8f042a3e146f049d34fb5d2867cbfb1a3bb74217eaf471c395507ce305"
+    },
+    {
+      "path": "tests/p2/__init__.py",
+      "sha256": "f0038678c1f625a636e9aba7cc848ca8f73a8bfaabddeaa3feda9ac33e4d05b6"
+    },
+    {
+      "path": "tests/p2/test_content_koubo_analyzer_p2.py",
+      "sha256": "85d2c67af6220b45f212460aa39d36ed758d8ae08437967dccc968fb4338aeb9"
+    },
+    {
+      "path": "tests/p3/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/p3/test_content_koubo_context_p3.py",
+      "sha256": "44350c04b29854d9b98fbaca531f5021cac38c5b83b36839b7ff04bf51d3428b"
+    },
+    {
+      "path": "tests/p4/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/p4/test_content_koubo_writer_p4.py",
+      "sha256": "4bd19de8ff5d25687bf39f71543111a4edb6cafb329c35037e58a953231582ee"
+    },
+    {
+      "path": "tests/p5/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/p5/test_content_koubo_publish_pack_p5.py",
+      "sha256": "25e2aae5761e1a950204baaf757db24457817085397de6bf829a8d0eaaf559a3"
+    },
+    {
+      "path": "tests/p6/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/p6/test_content_koubo_slim_p6.py",
+      "sha256": "2cf6a902176741b8b5bf18db6137e3fbdb9361229ef730b014bda004cc111e2a"
+    },
+    {
+      "path": "tests/p7/__init__.py",
+      "sha256": "dec846c75974a5b052ddab34bf7f70c2fab023f1961474f73dddb9a290aa68e2"
+    },
+    {
+      "path": "tests/p7/test_content_koubo_slim_release.py",
+      "sha256": "591143282fe89e399a1faa6474a975c38cb64512eb4a788dbb694d981ac4f536"
+    },
+    {
       "path": "tests/release_baseline/__init__.py",
       "sha256": "c5a4e31b8eecf4a2c70937ff7b64719ee8693762c0887d713df2eb770903bb12"
     },
@@ -479,11 +647,27 @@
     },
     {
       "path": "tools/build_release_manifest.py",
-      "sha256": "e08671ed6256657532056f29d54c617fcdf0203b9e48f18d0833188abe45c955"
+      "sha256": "aa4d3c7f5f0f7a0618a53dcfe2617c0d898d7bf721749d36c36e2443b46d683b"
+    },
+    {
+      "path": "tools/content_koubo_slim_release.py",
+      "sha256": "87f4f5d9b64d804a57af5b4573e96eda50b46133627664ced7dec2d64bc22bbf"
+    },
+    {
+      "path": "tools/install_verified.py",
+      "sha256": "4787ddd8b807b51ddeb8db82bfc8e75853a0f6d12caa2a814dece18acb07d05a"
+    },
+    {
+      "path": "tools/package_release.py",
+      "sha256": "6e45f6daae7ca12ca403c4202a35bc68938ddda4c3530c392c0bc9f162afa8a0"
+    },
+    {
+      "path": "tools/quick_validate_skill.py",
+      "sha256": "ee6dba90f44d37171c5a6edb8095979c54919ff6822c1a907afca2e78c48738c"
     },
     {
       "path": "tools/verify.py",
-      "sha256": "37b7a2859d886c1f07be82a515cb7fdbc3a311a6640f81abab9f99c047b8d472"
+      "sha256": "08a81e4d249742bf78cbf5e0c18d6671d3efed6de493246640ebd9f992e49a3e"
     }
   ],
   "public_methods": {
@@ -491,5 +675,5 @@
     "package_version": "1.1.0",
     "repository": "https://github.com/slbb1995/zsk-knowledge-base-skill"
   },
-  "schema_version": "content-koubo-export-v1"
+  "schema_version": "content-koubo-source-v2"
 }

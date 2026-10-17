@@ -84,6 +84,16 @@ def main() -> int:
     manifest["integrity"] = {"hash_algorithm": "sha256"}
     with manifest_path.open("w", encoding="utf-8", newline="\n") as handle:
         handle.write(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    provenance_path = ROOT / 'SOURCE.json'
+    provenance = json.loads(provenance_path.read_text(encoding='utf-8'))
+    provenance['schema_version'] = 'content-koubo-source-v2'
+    provenance['development'] = {'repository': 'https://github.com/slbb1995/content-koubo-slim', 'skill_root': 'Skills'}
+    provenance['payload'] = [{'path': p.relative_to(ROOT).as_posix(), 'sha256': sha256(p)}
+        for p in sorted(ROOT.rglob('*')) if p.is_file()
+        and '.git' not in p.relative_to(ROOT).parts
+        and '__pycache__' not in p.parts and p.suffix not in {'.pyc', '.pyo'}
+        and p.name not in {'SOURCE.json', 'release-manifest.json', 'SHA256SUMS'}]
+    provenance_path.write_text(json.dumps(provenance, ensure_ascii=False, indent=2, sort_keys=True)+'\n', encoding='utf-8')
     checksum_paths = [
         *(ROOT / item["path"] for item in files),
         ROOT / "VERSION",

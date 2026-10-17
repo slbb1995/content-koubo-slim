@@ -1,0 +1,63 @@
+{
+  "receipt_version": "skill-creator-invocation-v1",
+  "invoked_at": "2026-08-17T22:43:24+0800",
+  "branch": "feature/content-v2-slim",
+  "head_before_invocation": "792502deac69820a5eadfb968f8fd34a5ce73ee9",
+  "skill_name": "content-analyzer",
+  "skill_creator_source": "~/.codex/skills/.system/skill-creator/SKILL.md",
+  "skill_creator_sha256": "da44c88f6b3845a8fa8c60792ec9a722110a55a9793c279757b48fefb11f819c",
+  "initializer_source": "~/.codex/skills/.system/skill-creator/scripts/init_skill.py",
+  "initializer_sha256": "f40cb8fafc34e2d5dbbb8b6b04297af128b70844b67bc9445ef69790e0cdb49e",
+  "command": "python3 -B <skill-creator-root>/scripts/init_skill.py content-analyzer --path skills/content-mainline --resources references --interface display_name=Content Analyzer 爆款拆解 --interface short_description=拆解一至五篇参考并融合当前客户内容方法，生成完整写作方向 --interface default_prompt=使用 $content-analyzer 拆解已准备的参考与方法候选，并生成等待 Gate A 确认的完整写作方向。",
+  "exit_code": 0,
+  "created": [
+    "skills/content-mainline/content-analyzer/SKILL.md",
+    "skills/content-mainline/content-analyzer/agents/openai.yaml",
+    "skills/content-mainline/content-analyzer/references/"
+  ],
+  "initializer_output": "Skill 'content-analyzer' initialized successfully",
+  "design_card_sha256": "39be7b55f501c4047b2a95b41f10aea3dff3d0ab9fb3bfdde5f577486a312302",
+  "design_card_sha256_at_invocation": "39be7b55f501c4047b2a95b41f10aea3dff3d0ab9fb3bfdde5f577486a312302",
+  "structural_updates": [
+    {
+      "invoked_at": "2026-08-17T23:57:08+0800",
+      "head_before_invocation": "dce2a03a6ccc442b6bc65941248183f3f3607b5c",
+      "reason": "P2 Gate Review structural repair after final design-card reread",
+      "design_card_sha256": "39be7b55f501c4047b2a95b41f10aea3dff3d0ab9fb3bfdde5f577486a312302",
+      "changes": [
+        "remove user-supplied topic normalization and audience fields",
+        "make Analyzer infer target audience for Gate A confirmation",
+        "bind analyzer_input_vN to direction_vN and require human revision feedback",
+        "freeze the displayed Gate A projection with direction_version and hash",
+        "use controlled deterministic task records when Host identity is unavailable",
+        "keep Analyzer handoff and technical source data inside Run artifacts"
+      ],
+      "generator_source": "~/.codex/skills/.system/skill-creator/scripts/generate_openai_yaml.py",
+      "generator_sha256": "ddaf9abdfb3e762ed3c82571e9c607ce964188f49f2146281beb2cb8a553a93d",
+      "command": "python3 -B <skill-creator-root>/scripts/generate_openai_yaml.py skills/content-mainline/content-analyzer --interface display_name=Content Analyzer 爆款拆解 --interface short_description=拆解一至五篇参考并融合当前客户内容方法，生成完整写作方向 --interface default_prompt=使用 $content-analyzer 拆解已准备的参考与方法候选，并生成等待 Gate A 确认的完整写作方向。",
+      "exit_code": 0,
+      "final_skill_sha256": "f8db97702a09ad020550c0e1188d1188da0093123ef4ddabd26fe863c4db945c",
+      "openai_yaml_sha256": "6ed4f4a3c227546c2b93156e1a0ee4ae85a0e358006fcedb08e5c0313e791540"
+    }
+  ],
+  "final_validation": {
+    "validated_at": "2026-08-17T23:57:08+0800",
+    "command": "python3 -B <skill-creator-root>/scripts/quick_validate.py skills/content-mainline/content-analyzer",
+    "exit_code": 0,
+    "output": "Skill is valid!",
+    "skill_sha256": "f8db97702a09ad020550c0e1188d1188da0093123ef4ddabd26fe863c4db945c",
+    "openai_yaml_sha256": "6ed4f4a3c227546c2b93156e1a0ee4ae85a0e358006fcedb08e5c0313e791540",
+    "reference_sha256": "3ac16c9db3f1151a7ab57d7473bf0f23cdc57ca2dcd591c0fedbdea637fc5b44",
+    "input_schema_sha256": "71f47d6537ae1399f34dd045d74868c60fdf42f6031b9e14c66a185b622dd1f7",
+    "output_schema_sha256": "2bced3629ddcb3015e8cb305770520243a208b7c45b9ecb38eee633178f5ee1a"
+  },
+  "forward_test": {
+    "input_shape": "two independent references plus one peer_content_asset and one oral_method_asset",
+    "skill_invocation_count": 1,
+    "result": "passed",
+    "evidence_path": "audits/p2-gate-review/content-analyzer-forward-evidence.json",
+    "evidence_sha256": "f186eaae3c9ddcaaa759347579a029382cd83357d6ecd9627ee5d44a829e1929",
+    "checks_passed": 15,
+    "runtime_chain_modified": false
+  }
+}

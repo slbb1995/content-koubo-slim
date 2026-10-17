@@ -1,0 +1,13 @@
+{
+  "schema_version": "workflow-skill-selection-v1",
+  "package_id": "content-koubo-slim",
+  "source_root": "Skills",
+  "expected_skill_count": 5,
+  "skills": [
+    "content-koubo-analyzer",
+    "content-koubo-context-retriever",
+    "content-koubo-publish-pack",
+    "content-koubo-slim",
+    "content-koubo-writer"
+  ]
+}

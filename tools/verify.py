@@ -48,9 +48,9 @@ def runtime_paths() -> set[str]:
 
 def verify_content() -> None:
     provenance = json.loads((ROOT / 'SOURCE.json').read_text(encoding='utf-8'))
-    if (provenance.get('schema_version') != 'content-koubo-export-v1'
-            or provenance['development'].get('repository') != 'https://github.com/slbb1995/content-workflow-skills'
-            or not re.fullmatch(r'[0-9a-f]{40}', provenance['development'].get('commit', ''))
+    if (provenance.get('schema_version') != 'content-koubo-source-v2'
+            or provenance['development'].get('repository') != 'https://github.com/slbb1995/content-koubo-slim'
+            or provenance['development'].get('skill_root') != 'Skills'
             or provenance['public_methods'].get('repository') != 'https://github.com/slbb1995/zsk-knowledge-base-skill'
             or not re.fullmatch(r'[0-9a-f]{40}', provenance['public_methods'].get('commit', ''))):
         raise RuntimeError('Release source provenance is invalid')
@@ -65,6 +65,7 @@ def verify_content() -> None:
             raise RuntimeError(f'Exported file differs from the fixed source: {path}')
     actual = {p.relative_to(ROOT).as_posix() for p in ROOT.rglob('*')
               if p.is_file() and '.git' not in p.relative_to(ROOT).parts}
+    actual = {name for name in actual if not any(part == '__pycache__' for part in Path(name).parts) and not name.endswith(('.pyc', '.pyo'))}
     if actual != declared | {'SOURCE.json', 'release-manifest.json', 'SHA256SUMS'}:
         raise RuntimeError('Release contains missing or unregistered files')
     methods = json.loads((ROOT/'public-methods/package.json').read_text(encoding='utf-8'))
@@ -131,11 +132,9 @@ def verify_content() -> None:
                 f"Content 口播 Slim manifest mismatch: {item['path']}"
             )
 
-    packages = ROOT / "Packages"
-    if packages.exists() and any(packages.rglob("*")):
-        raise RuntimeError(
-            "standalone Content 口播 Slim must not contain bundled packages"
-        )
+    selectors = ROOT / 'packages'
+    if {p.name for p in selectors.iterdir()} != {'content-mainline.json', 'content-koubo-slim.json'}:
+        raise RuntimeError('Only migration metadata and the five-skill selector belong in packages/')
 
 
 def verify_examples_and_cli() -> None:
