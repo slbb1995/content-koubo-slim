@@ -9,7 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 from unittest.mock import patch
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 STANDALONE = (ROOT / 'Skills/content-koubo-slim').is_dir()
 sys.path.insert(0, str(ROOT / ('Skills' if STANDALONE else 'skills/content-mainline') / 'content-koubo-slim'))
 from scripts import content_koubo_slim as api
@@ -18,7 +18,7 @@ from runtime.run_store import RunStore
 from runtime.error_model import SlimRuntimeError
 from runtime.schema_validation import SOURCE_ROLE_POLICY
 if STANDALONE:
-    from test_customer_repairs import pack
+    from tests.release_baseline.test_customer_repairs import pack
 else:
     from tests.test_customer_repairs import pack
 
@@ -26,7 +26,7 @@ else:
 class BatchTests(unittest.TestCase):
     def setUp(self):
         if STANDALONE:
-            from test_idea_first import IdeaFirstTests, material
+            from tests.release_baseline.test_idea_first import IdeaFirstTests, material
             f = IdeaFirstTests(); f.setUp(); self.addCleanup(f.doCleanups)
             self.root, self.registry, self.vault, self.methods = f.root, f.registry, f.vault, f.methods
             extra = {'method_selections': [material(f.methods)], 'audience_scope':'consumer'}
@@ -40,7 +40,7 @@ class BatchTests(unittest.TestCase):
             refs = write_references(self.root, 2); client = 'client-alpha'
             self.methods = self.vault / 'authorized-methods'; extra = {}
         self.runs = self.root / 'batch-runs'
-        self.request = dict(registry_path=self.registry, runs_root=self.runs, client_id=client,
+        self.request = dict(analysis_version="slim-1.0", registry_path=self.registry, runs_root=self.runs, client_id=client,
             speaker_mode='neutral', topic_original='普通家庭做保险选择前，先问哪几个问题？',
             reference_paths=refs, user_thoughts=None, must_keep=[], must_avoid=[], **extra)
         self.plan = {'batch_id':str(uuid4()), 'output_count':2,
@@ -55,7 +55,7 @@ class BatchTests(unittest.TestCase):
         store=RunStore(self.runs); key=store.resolve_task_record(record)
         inp=store.read_fixed_json(key,'analyzer_input_v1.json')
         if STANDALONE:
-            from test_idea_first import direction
+            from tests.release_baseline.test_idea_first import direction
             result=direction(inp)
         else:
             from tests.p2.test_content_koubo_analyzer_p2 import analyzer_result
@@ -157,7 +157,7 @@ class BatchTests(unittest.TestCase):
 
     def test_cli_requires_plan_and_exposes_independent_records(self):
         script=Path(api.__file__)
-        command=[sys.executable, '-I', '-S', '-B', str(script), 'start', '--registry', str(self.registry),
+        command=[sys.executable, '-I', '-S', '-B', str(script), 'start', '--analysis-version', 'slim-1.0', '--registry', str(self.registry),
             '--runs-root', str(self.runs), '--speaker-mode', 'neutral', '--topic-original', self.request['topic_original'],
             '--output-count', '2']
         for path in self.request['reference_paths']:command += ['--reference', str(path)]

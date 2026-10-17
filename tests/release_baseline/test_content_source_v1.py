@@ -9,8 +9,8 @@ import unittest
 from unittest import mock
 
 
-ROOT = Path(__file__).resolve().parents[1]
-SKILL_ROOT = ROOT / "Skills" / "content-koubo-slim"
+ROOT = Path(__file__).resolve().parents[2]
+SKILL_ROOT = ROOT / ("Skills" if (ROOT / "Skills/content-koubo-slim").is_dir() else "skills/content-mainline") / "content-koubo-slim"
 sys.path.insert(0, str(SKILL_ROOT))
 
 from runtime.client_registry import load_effective_registry, resolve_client, select_client_id  # noqa: E402
@@ -88,7 +88,7 @@ class ContentSourceV1Tests(unittest.TestCase):
             self.assertEqual(applied["readback"], "verified")
             reference = root / "reference.md"
             reference.write_text("# 参考\n\n先判断问题，再给行动。\n", encoding="utf-8")
-            response_a, record_a = prepare_direction_stage(
+            response_a, record_a = prepare_direction_stage(analysis_version="slim-1.0",
                 registry_path=registry,
                 runs_root=root / "runs",
                 client_id=None,
@@ -100,7 +100,7 @@ class ContentSourceV1Tests(unittest.TestCase):
                 must_avoid=[],
                 profile="甲",
             )
-            response_b, record_b = prepare_direction_stage(
+            response_b, record_b = prepare_direction_stage(analysis_version="slim-1.0",
                 registry_path=registry,
                 runs_root=root / "runs",
                 client_id=None,
@@ -193,7 +193,7 @@ class ContentSourceV1Tests(unittest.TestCase):
                     encoding="utf-8",
                 )
                 runs = root / "runs"
-                _response, task_record = prepare_direction_stage(
+                _response, task_record = prepare_direction_stage(analysis_version="slim-1.0",
                     registry_path=registry,
                     runs_root=runs,
                     client_id=None,
@@ -286,7 +286,7 @@ class ContentSourceV1Tests(unittest.TestCase):
             reference = root / "reference.md"
             reference.write_text("# 完整参考\n\n先识别真正的问题，再给出一个可以执行的最小行动，最后提醒读者核对结果。\n", encoding="utf-8")
             runs = root / "runs"
-            _response, task_record = prepare_direction_stage(
+            _response, task_record = prepare_direction_stage(analysis_version="slim-1.0",
                 registry_path=registry,
                 runs_root=runs,
                 client_id=None,

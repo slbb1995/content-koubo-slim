@@ -11,13 +11,13 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT/'Skills/content-koubo-slim'), str(ROOT/'tests')]
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT/('Skills' if (ROOT/'Skills/content-koubo-slim').is_dir() else 'skills/content-mainline')/'content-koubo-slim'))
 from runtime.feishu_client import _lark_command, document_body_variants
 from runtime.feishu_source import FeishuSpace, FeishuDocument, FeishuRoot, remote_json
 from runtime.feishu_save import save_feishu_pair, verify_saved_feishu_pair
 from runtime.error_model import SlimRuntimeError
-from test_feishu_retained import FakeClient
+from tests.release_baseline.test_feishu_retained import FakeClient
 
 
 class NativeTitleClient(FakeClient):

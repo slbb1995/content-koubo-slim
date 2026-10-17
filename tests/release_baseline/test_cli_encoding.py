@@ -5,8 +5,8 @@ import subprocess
 import sys
 import unittest
 
-ROOT = Path(__file__).resolve().parents[1]
-CLI = ROOT / "Skills" / "content-koubo-slim" / "scripts" / "content_koubo_slim.py"
+ROOT = Path(__file__).resolve().parents[2]
+CLI = ROOT / ("Skills" if (ROOT / "Skills/content-koubo-slim").is_dir() else "skills/content-mainline") / "content-koubo-slim" / "scripts" / "content_koubo_slim.py"
 
 
 class CliEncodingTests(unittest.TestCase):

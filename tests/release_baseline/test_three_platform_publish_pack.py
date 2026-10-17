@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "Skills/content-koubo-slim"), str(ROOT / "tests")]
+ROOT = Path(__file__).resolve().parents[2]
+sys.path[:0] = [str(ROOT / ("Skills" if (ROOT / "Skills/content-koubo-slim").is_dir() else "skills/content-mainline") / "content-koubo-slim")]
 
 from runtime.error_model import SlimRuntimeError
 from runtime.feishu_save import (
@@ -19,9 +20,9 @@ from runtime.feishu_save import (
 from runtime.feishu_source import FeishuRoot, FeishuSpace
 from runtime.schema_validation import validate_publish_pack_result
 from scripts import content_koubo_slim as api
-import test_customer_repairs as customer_fixtures
-import test_batch_tasks as batch_fixtures
-from test_feishu_retained import FakeClient
+from tests.release_baseline import test_customer_repairs as customer_fixtures
+from tests.release_baseline import test_batch_tasks as batch_fixtures
+from tests.release_baseline.test_feishu_retained import FakeClient
 
 
 def platform_pack(*, xhs_copy: str = "把判断步骤整理成可回看的简短清单。") -> dict:
@@ -186,10 +187,69 @@ class ThreePlatformRunTests(unittest.TestCase):
                 package_result=customer_fixtures.pack(), revision_feedback="调整整套平台配套",
                 based_on_draft_version=1)
 
+    def test_rejected_result_does_not_create_a_revision_request(self):
+        self.record(platform_pack(), base=0)
+        artifacts = self.store.run_directory(self.key) / 'artifacts'
+        before = {p.name:p.read_bytes() for p in artifacts.iterdir() if p.is_file()}
+        for base, draft, value in ((0, 1, platform_pack()), (1, 2, platform_pack()), (1, 1, {})):
+            with self.assertRaises(SlimRuntimeError):
+                api.record_package_result(**self.args, base_package_version=base,
+                    based_on_draft_version=draft, package_result=value,
+                    revision_feedback='迟到或无效的修改结果')
+            self.assertEqual({p.name:p.read_bytes() for p in artifacts.iterdir() if p.is_file()}, before)
+        done, _ = api.respond_package(**self.args, registry_path=self.registry, decision='确认并保存')
+        self.assertEqual(done['status'], 'completed')
+
+    def test_legacy_saved_title_equal_to_topic_reuses_its_acknowledged_oral(self):
+        legacy = customer_fixtures.pack()
+        title = self.store.read_task_input(self.key)['topic_original']
+        legacy['publish_titles'][0] = title
+        legacy['recommended_publish_title'] = title
+        api.record_package_result(**self.args, base_package_version=0, package_result=legacy)
+        api.respond_package(**self.args, registry_path=self.registry, decision='确认并保存')
+        receipt = self.store.run_directory(self.key) / 'local-save/v1/local-save.json'
+        original = json.loads(receipt.read_text())['result']
+        before = {name:Path(original[name]).read_bytes() for name in ('oral_path', 'package_path')}
+        api.respond_package(**self.args, registry_path=self.registry, decision='需要修改', feedback='升级三平台配套')
+        self.record(platform_pack(), base=1)
+        api.respond_package(**self.args, registry_path=self.registry, decision='确认并保存')
+        saved = self.store.read_fixed_json(self.key, 'saved_release_d1_p2.json')
+        self.assertEqual(saved['oral_path'], original['oral_path'])
+        for name, body in before.items():
+            self.assertEqual(Path(original[name]).read_bytes(), body)
+        self.assertEqual(len(list(Path(original['oral_path']).parent.glob('*-口播稿.md'))), 1)
+
+    def test_unacknowledged_legacy_receipt_never_creates_new_output(self):
+        self.fixture.package(); self.fixture.save()
+        receipt = self.store.run_directory(self.key) / 'local-save/v1/local-save.json'
+        value = json.loads(receipt.read_text())
+        parent = Path(value['result']['oral_path']).parent
+        before = {p.name:p.read_bytes() for p in parent.iterdir() if p.is_file()}
+        value['result'] = None
+        receipt.write_text(json.dumps(value))
+        api.respond_package(**self.args, registry_path=self.registry, decision='需要修改', feedback='升级三平台配套')
+        self.record(platform_pack(), base=1)
+        with self.assertRaises(SlimRuntimeError):
+            api.respond_package(**self.args, registry_path=self.registry, decision='确认并保存')
+        self.assertEqual({p.name:p.read_bytes() for p in parent.iterdir() if p.is_file()}, before)
+
+    def test_missing_legacy_receipt_never_falls_back_to_a_fresh_pair(self):
+        self.fixture.package(); self.fixture.save()
+        receipt = self.store.run_directory(self.key) / 'local-save/v1/local-save.json'
+        value = json.loads(receipt.read_text())
+        parent = Path(value['result']['oral_path']).parent
+        before = {p.name:p.read_bytes() for p in parent.iterdir() if p.is_file()}
+        receipt.unlink()
+        api.respond_package(**self.args, registry_path=self.registry, decision='需要修改', feedback='升级三平台配套')
+        self.record(platform_pack(), base=1)
+        with self.assertRaises(SlimRuntimeError):
+            api.respond_package(**self.args, registry_path=self.registry, decision='确认并保存')
+        self.assertEqual({p.name:p.read_bytes() for p in parent.iterdir() if p.is_file()}, before)
+
 
 class ThreePlatformSaveTests(unittest.TestCase):
     def test_readable_samples_cover_three_industries_goals_and_modes_without_claiming_traffic(self):
-        text = (ROOT / "examples/three-platform-synthetic-samples.md").read_text(encoding="utf-8")
+        text = (Path(__file__).parent / "examples/three-platform-synthetic-samples.md").read_text(encoding="utf-8")
         for value in ("保险知识解释", "企业 AI 落地观点", "家居服务转化说明",
                       "explain", "discuss", "convert", "neutral", "company_brand", "personal_ip"):
             self.assertIn(value, text)

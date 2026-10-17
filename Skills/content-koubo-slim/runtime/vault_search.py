@@ -51,7 +51,7 @@ def complete_method_text(asset: MethodAsset) -> str:
 
 def method_source_metadata(asset: MethodAsset) -> dict[str, Any]:
     return {key: asset.metadata[key] for key in (
-        "type", "status", "audience_scope", "method_kind", "structure_layer", "maturity",
+        "type", "status", "audience_scope", "asset_version", "method_kind", "structure_layer", "maturity",
         "usage_scope", "source_verification", "claim_scope", "applicable_workflows",
         "source_id", "source_section") if key in asset.metadata}
 
@@ -91,7 +91,7 @@ def discover_method_assets(method_root: str | Path | FeishuRoot, *, offset: int 
                       "asset_role": asset.asset_role, "title": asset.title, "method_kind": method_kind(asset),
                       "audience_scope": asset.audience_scope, "keywords": list(asset.keywords),
                       "use_when": list(asset.use_when), "content_purposes": asset.metadata.get("content_purposes", []),
-                      "maturity": asset.metadata.get("maturity"), "usage_scope": asset.metadata.get("usage_scope"),
+                      "asset_version": asset.metadata.get("asset_version"), "maturity": asset.metadata.get("maturity"), "usage_scope": asset.metadata.get("usage_scope"),
                       "source_verification": asset.metadata.get("source_verification")})
     return {"items": items[offset:offset+limit], "total": len(items),
             "next_offset": offset+limit if offset+limit < len(items) else None,

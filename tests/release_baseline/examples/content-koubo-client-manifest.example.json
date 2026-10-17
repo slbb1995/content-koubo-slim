@@ -1,0 +1,27 @@
+{
+  "contract_version": "2.0",
+  "client_id": "my-content",
+  "asset_roots": {
+    "knowledge": "knowledge-data",
+    "method": "method-data",
+    "profile": "profile-data",
+    "output": "output-data"
+  },
+  "default_speaker_mode": "neutral",
+  "allowed_speaker_modes": [
+    "neutral",
+    "company_brand",
+    "personal_ip"
+  ],
+  "profile_policy": {
+    "required_when": [
+      "personal_ip"
+    ],
+    "selector": {
+      "status": "active",
+      "is_primary": true
+    }
+  },
+  "default_platform": "short_video",
+  "output_template": "finished/{profile_or_brand}/weekly"
+}

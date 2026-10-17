@@ -5,33 +5,281 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "context_version", "client_id", "speaker_mode", "task_input",
-    "approved_direction", "selected_external_reference_mechanisms",
-    "selected_04_assets", "business_context_needs", "knowledge_candidates",
-    "profile_candidate", "writer_mode", "secondary_tactics"
+    "context_version",
+    "client_id",
+    "speaker_mode",
+    "task_input",
+    "approved_direction",
+    "selected_external_reference_mechanisms",
+    "selected_04_assets",
+    "business_context_needs",
+    "knowledge_candidates",
+    "profile_candidate",
+    "writer_mode",
+    "secondary_tactics"
   ],
   "properties": {
-    "context_version": {"const": "slim-1.0"},
-    "source_mode": {"enum": ["external", "library"]},
-    "client_id": {"type": "string", "minLength": 1},
-    "speaker_mode": {"enum": ["personal_ip", "company_brand", "neutral"]},
+    "context_version": {
+      "const": "slim-1.0"
+    },
+    "source_mode": {
+      "enum": [
+        "external",
+        "library"
+      ]
+    },
+    "client_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "speaker_mode": {
+      "enum": [
+        "personal_ip",
+        "company_brand",
+        "neutral"
+      ]
+    },
     "task_input": {
-      "type": "object", "additionalProperties": false,
-      "required": ["topic_original", "user_thoughts", "must_keep", "must_avoid"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "topic_original",
+        "user_thoughts",
+        "must_keep",
+        "must_avoid"
+      ],
       "properties": {
-        "topic_original": {"type": "string", "minLength": 1},
-        "user_thoughts": {"type": ["string", "null"]},
-        "must_keep": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-        "must_avoid": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+        "topic_original": {
+          "type": "string",
+          "minLength": 1
+        },
+        "user_thoughts": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "must_keep": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "must_avoid": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
       }
     },
-    "approved_direction": {"type": "object"},
-    "selected_external_reference_mechanisms": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-    "selected_04_assets": {"type": "array", "maxItems": 5, "items": {"type": "object"}},
-    "business_context_needs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-    "knowledge_candidates": {"type": "array", "maxItems": 5, "items": {"type": "object"}},
-    "profile_candidate": {"type": ["object", "null"]},
-    "writer_mode": {"enum": ["ganhuo", "huati", "zhuanhua"]},
-    "secondary_tactics": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+    "approved_direction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_audience",
+        "core_promise",
+        "external_reference_value",
+        "structure_plan",
+        "user_boundaries",
+        "generalization_boundary"
+      ],
+      "properties": {
+        "target_audience": {
+          "type": "string",
+          "minLength": 1
+        },
+        "core_promise": {
+          "type": "string",
+          "minLength": 1
+        },
+        "external_reference_value": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "structure_plan": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "user_boundaries": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "user_thoughts",
+            "must_keep",
+            "must_avoid"
+          ],
+          "properties": {
+            "user_thoughts": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "must_keep": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "must_avoid": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "generalization_boundary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "writing_design": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "angle",
+            "opening",
+            "body_steps",
+            "ending",
+            "method_uses",
+            "evidence_boundary"
+          ],
+          "properties": {
+            "angle": {
+              "type": "string",
+              "minLength": 1
+            },
+            "opening": {
+              "type": "string",
+              "minLength": 1
+            },
+            "body_steps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "content",
+                  "reason",
+                  "evidence"
+                ],
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "evidence": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "minItems": 1
+            },
+            "ending": {
+              "type": "string",
+              "minLength": 1
+            },
+            "method_uses": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "asset_id",
+                  "application"
+                ],
+                "properties": {
+                  "asset_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "application": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            },
+            "evidence_boundary": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "selected_external_reference_mechanisms": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "selected_04_assets": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object"
+      }
+    },
+    "business_context_needs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "knowledge_candidates": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object"
+      }
+    },
+    "profile_candidate": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "writer_mode": {
+      "enum": [
+        "ganhuo",
+        "huati",
+        "zhuanhua"
+      ]
+    },
+    "secondary_tactics": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
   }
 }

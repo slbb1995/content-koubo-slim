@@ -2,7 +2,7 @@
 from pathlib import Path
 import unittest
 from unittest.mock import patch
-import test_content_source_v1 as baseline
+from tests.release_baseline import test_content_source_v1 as baseline
 from runtime.run_store import RunStore
 from runtime.error_model import SlimRuntimeError
 

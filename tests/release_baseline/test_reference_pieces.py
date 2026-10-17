@@ -7,7 +7,7 @@ import sys
 import tempfile
 import unittest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / ('Skills' if (ROOT / 'Skills/content-koubo-slim').is_dir() else 'skills/content-mainline') / 'content-koubo-slim'
 sys.path.insert(0, str(SKILL))
 from runtime.reference_prep import preflight_references, write_prepared_references

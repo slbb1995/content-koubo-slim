@@ -7,12 +7,12 @@ description: Content 口播 Slim 的内部选材、拆解与方向 Skill。由�
 
 ## 一句话目的
 
-把已准备好的外部参考和少量 04 候选融合成一版完整、可判断、不会挪用同行身份的写作方向。
+把已准备好的外部参考和少量 04 候选形成一版推荐或必要时两个完整、可判断、不会挪用同行身份的写作方向。
 
 ## 使用边界
 
 - 选材阶段只接收入口通过 `discover-methods` 提供的同库受控目录、完整候选和用户输入；遵守入口 `references/idea-first-materials.md`，返回内部选择及具体理由，不创建 Run；
-- 方向阶段只接收程序生成并通过校验的 `analyzer_input_v1`，分析其中 0—5 篇独立参考和 0—5 张 04 候选，以及可选选材指引；
+- 方向阶段只接收程序生成并通过校验的 `analyzer_input_v1`，分析其中 0—5 篇独立参考和 0—5 张 04 候选，以及新版必需的通用指引和按需详解；
 - 不接收原始 `task_key`、绝对路径、整个 Vault 或未授权页面；
 - 不创建 Run、状态、版本、收据或临时程序；
 - 不读取 03/05，不创建 Content Context Pack，不调用 Writer；
@@ -36,7 +36,7 @@ description: Content 口播 Slim 的内部选材、拆解与方向 Skill。由�
 只返回一份符合 `schemas/analyzer-output.schema.json` 的 `analyzer_result_v1`：
 
 - 每篇参考各有一项 `reference_analyses`；它们共同组成同版详细拆解报告，也是下游 Writer 详细蓝图的唯一来源，不能被客户阅读摘要替代；
-- 多篇只形成一个 `fused_direction`，显式记录冲突与处理；
+- slim-1.1 共用逐篇拆解，返回 method_judgment、1—2 个 direction_options 及推荐理由；每个选项包含独立 fused_direction / writing_design、reference_usage、04 用途、业务需求、模式及客户投影；slim-1.0 旧任务保持单方向合同；
 - 04 选择只来自输入候选，保留角色、相对路径和页面哈希；
 - `content_goal` 只用 `explain / discuss / convert`；
 - `writer_mode` 只选 `ganhuo / huati / zhuanhua` 中一个，并说明业务理由；
@@ -44,11 +44,11 @@ description: Content 口播 Slim 的内部选材、拆解与方向 Skill。由�
 - `business_context_needs` 只列后续可能需要的业务资料类型，不读取资料；
 - `customer_readable_direction` 完整承载 Gate A 的业务内容；其受众、核心承诺、参考价值、口播结构、Writer 理由、04 使用方式和一般化边界必须与对应融合字段同值。
 
-不要输出机械 ID、绝对路径、时间、状态、正文或发布物料。
+内部 JSON 按合同保留素材与选项 ID；不把技术字段作为客户展示，不输出绝对路径、时间、状态、正文或发布物料。
 
 ## 执行流程
 
-1. 完整读取 `references/source-roles-and-gate-a.md`；
+1. 完整读取 `references/source-roles-and-gate-a.md`；slim-1.1 同时遵守 [方向设计](references/direction-design.md)，读取本次 planning_guidance；
 2. 逐篇拆解受众、问题主线、核心承诺、内容价值、钩子与结构机制；
 3. 为每篇分开列出可迁移点和禁止转移项；
 4. 多篇时融合共同机制、去重，记录至少绑定两篇来源的真实冲突；无冲突使用空数组；
@@ -60,7 +60,7 @@ description: Content 口播 Slim 的内部选材、拆解与方向 Skill。由�
 
 ## Gate A 边界
 
-Analyzer 只生成一份同版结果，但服务两个用途：`reference_analyses + fused_direction` 是详细拆解报告，供后续形成 Writer 详细蓝图；`customer_readable_direction` 是这份报告的客户确认投影。入口把客户投影固定分成五组展示：谁来说、讲给谁；核心观点和承诺；对标准备保留什么；哪些内容不照搬；准备怎么讲。五组不得改变详细报告的业务结论，也不得成为 Writer 的唯一依据。
+Analyzer 只生成一份同版结果，但服务两个用途：`reference_analyses` 与每项 `fused_direction / writing_design / reference_usage` 是详细拆解报告，供后续形成 Writer 详细蓝图；`customer_readable_direction` 是这份报告的客户确认投影。入口把客户投影固定分成五组展示：谁来说、讲给谁；核心观点和承诺；对标准备保留什么；哪些内容不照搬；准备怎么讲。五组不得改变详细报告的业务结论，也不得成为 Writer 的唯一依据。
 
 Analyzer 不替用户选择 `认可整版方向 / 需要修改 / 不采用`，也不把程序校验当成人工批准。`direction_vN` 只响应同版本 `analyzer_input_vN`；V2 及以后必须含针对上一版的非空真人修改意见。普通修改返回完整新版，不覆盖旧版，不只返回补丁。
 

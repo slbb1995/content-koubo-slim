@@ -5,30 +5,272 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "context_version", "client_id", "speaker_mode", "topic_original",
-    "target_audience", "approved_direction", "user_thoughts", "must_keep",
-    "must_avoid", "selected_external_reference_mechanisms",
-    "selected_04_content_assets", "selected_04_method_assets",
-    "selected_03_business_assets", "profile_context", "source_role_policy",
-    "writer_mode", "secondary_tactics"
+    "context_version",
+    "client_id",
+    "speaker_mode",
+    "topic_original",
+    "target_audience",
+    "approved_direction",
+    "user_thoughts",
+    "must_keep",
+    "must_avoid",
+    "selected_external_reference_mechanisms",
+    "selected_04_content_assets",
+    "selected_04_method_assets",
+    "selected_03_business_assets",
+    "profile_context",
+    "source_role_policy",
+    "writer_mode",
+    "secondary_tactics"
   ],
   "properties": {
-    "context_version": {"const": "slim-1.0"},
-    "client_id": {"type": "string", "minLength": 1},
-    "speaker_mode": {"enum": ["personal_ip", "company_brand", "neutral"]},
-    "topic_original": {"type": "string", "minLength": 1},
-    "target_audience": {"type": "string", "minLength": 1},
-    "approved_direction": {"type": "object"},
-    "user_thoughts": {"type": ["string", "null"]},
-    "must_keep": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-    "must_avoid": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-    "selected_external_reference_mechanisms": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-    "selected_04_content_assets": {"type": "array", "items": {"type": "object"}},
-    "selected_04_method_assets": {"type": "array", "items": {"type": "object"}},
-    "selected_03_business_assets": {"type": "array", "maxItems": 5, "items": {"type": "object"}},
-    "profile_context": {"type": ["object", "null"]},
-    "source_role_policy": {"type": "object"},
-    "writer_mode": {"enum": ["ganhuo", "huati", "zhuanhua"]},
-    "secondary_tactics": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+    "context_version": {
+      "const": "slim-1.0"
+    },
+    "client_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "speaker_mode": {
+      "enum": [
+        "personal_ip",
+        "company_brand",
+        "neutral"
+      ]
+    },
+    "topic_original": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target_audience": {
+      "type": "string",
+      "minLength": 1
+    },
+    "approved_direction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_audience",
+        "core_promise",
+        "external_reference_value",
+        "structure_plan",
+        "user_boundaries",
+        "generalization_boundary"
+      ],
+      "properties": {
+        "target_audience": {
+          "type": "string",
+          "minLength": 1
+        },
+        "core_promise": {
+          "type": "string",
+          "minLength": 1
+        },
+        "external_reference_value": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "structure_plan": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "user_boundaries": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "user_thoughts",
+            "must_keep",
+            "must_avoid"
+          ],
+          "properties": {
+            "user_thoughts": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "must_keep": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "must_avoid": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "generalization_boundary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "writing_design": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "angle",
+            "opening",
+            "body_steps",
+            "ending",
+            "method_uses",
+            "evidence_boundary"
+          ],
+          "properties": {
+            "angle": {
+              "type": "string",
+              "minLength": 1
+            },
+            "opening": {
+              "type": "string",
+              "minLength": 1
+            },
+            "body_steps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "content",
+                  "reason",
+                  "evidence"
+                ],
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "evidence": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "minItems": 1
+            },
+            "ending": {
+              "type": "string",
+              "minLength": 1
+            },
+            "method_uses": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "asset_id",
+                  "application"
+                ],
+                "properties": {
+                  "asset_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "application": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            },
+            "evidence_boundary": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "user_thoughts": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "must_keep": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "must_avoid": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "selected_external_reference_mechanisms": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "selected_04_content_assets": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "selected_04_method_assets": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "selected_03_business_assets": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object"
+      }
+    },
+    "profile_context": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "source_role_policy": {
+      "type": "object"
+    },
+    "writer_mode": {
+      "enum": [
+        "ganhuo",
+        "huati",
+        "zhuanhua"
+      ]
+    },
+    "secondary_tactics": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
   }
 }

@@ -10,6 +10,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,6 +47,32 @@ def runtime_paths() -> set[str]:
 
 
 def verify_content() -> None:
+    provenance = json.loads((ROOT / 'SOURCE.json').read_text(encoding='utf-8'))
+    if (provenance.get('schema_version') != 'content-koubo-export-v1'
+            or provenance['development'].get('repository') != 'https://github.com/slbb1995/content-workflow-skills'
+            or not re.fullmatch(r'[0-9a-f]{40}', provenance['development'].get('commit', ''))
+            or provenance['public_methods'].get('repository') != 'https://github.com/slbb1995/zsk-knowledge-base-skill'
+            or not re.fullmatch(r'[0-9a-f]{40}', provenance['public_methods'].get('commit', ''))):
+        raise RuntimeError('Release source provenance is invalid')
+    declared = set()
+    for item in provenance['payload']:
+        path = Path(item['path'])
+        if path.is_absolute() or '..' in path.parts or path.as_posix() in declared:
+            raise RuntimeError('Invalid or duplicate exported path')
+        declared.add(path.as_posix())
+        absolute = ROOT / path
+        if absolute.is_symlink() or not absolute.is_file() or sha256(absolute) != item['sha256']:
+            raise RuntimeError(f'Exported file differs from the fixed source: {path}')
+    actual = {p.relative_to(ROOT).as_posix() for p in ROOT.rglob('*')
+              if p.is_file() and '.git' not in p.relative_to(ROOT).parts}
+    if actual != declared | {'SOURCE.json', 'release-manifest.json', 'SHA256SUMS'}:
+        raise RuntimeError('Release contains missing or unregistered files')
+    methods = json.loads((ROOT/'public-methods/package.json').read_text(encoding='utf-8'))
+    if methods.get('package_version') != '1.1.0':
+        raise RuntimeError('Missing current public method guidance')
+    for item in methods['files']:
+        if sha256(ROOT/'public-methods'/item['path']) != item['sha256']:
+            raise RuntimeError('Public method package differs from its manifest')
     for line in (ROOT / "SHA256SUMS").read_text(
         encoding="utf-8"
     ).splitlines():
@@ -184,6 +211,9 @@ def verify_tests() -> None:
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     env["PYTHONUTF8"] = "1"
+    env['ORAL_METHOD_PACKAGE'] = str(ROOT / 'public-methods')
+    if Path('/private/tmp').is_dir():
+        env['TMPDIR'] = '/private/tmp'
     result = subprocess.run(
         [
             sys.executable,
@@ -208,6 +238,7 @@ def verify_tests() -> None:
         raise RuntimeError(
             "Content 口播 Slim tests failed:\n" + result.stdout + result.stderr
         )
+    print(result.stdout + result.stderr, end='')
 
 
 def main() -> int:

@@ -66,7 +66,7 @@ def tree_sha256(files: list[dict[str, object]]) -> str:
 
 def main() -> int:
     manifest_path = ROOT / "release-manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = {}
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     files = runtime_files()
     tree = tree_sha256(files)
@@ -88,6 +88,7 @@ def main() -> int:
         *(ROOT / item["path"] for item in files),
         ROOT / "VERSION",
         manifest_path,
+        ROOT / 'SOURCE.json',
     ]
     with (ROOT / "SHA256SUMS").open("w", encoding="utf-8", newline="\n") as handle:
         handle.write(

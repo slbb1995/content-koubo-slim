@@ -1,0 +1,19 @@
+{
+  "contract_version": "content-source-v1",
+  "bindings": {
+    "BND-75F8F85BEB4099F9": {
+      "binding_id": "BND-75F8F85BEB4099F9",
+      "client_id": "example-client",
+      "knowledge_base_id": "KB-0ED186CDB6A30C09",
+      "backend": "obsidian",
+      "locator": {"vault_root": "/absolute/path/to/knowledge-base"},
+      "manifest_ref": "06-Agent与Workflow/content-source-manifest.json",
+      "profile_index_ref": "06-Agent与Workflow/content-profile-index.json",
+      "supported_workflows": ["content-koubo-slim"],
+      "workflow_defaults": {"content-koubo-slim": {"profile_id": "PRF-5A97BA016CB0F8FC", "use_no_ip": false}},
+      "status": "active"
+    }
+  },
+  "workflow_defaults": {"content-koubo-slim": "BND-75F8F85BEB4099F9"},
+  "revision": 1
+}

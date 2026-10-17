@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 import unittest
 
-import test_content_source_v1 as fixtures
+from tests.release_baseline import test_content_source_v1 as fixtures
 
 from runtime.content_source import plan_obsidian_configuration, apply_obsidian_configuration
 from runtime.error_model import SlimRuntimeError
@@ -59,7 +59,7 @@ class IdeaFirstTests(unittest.TestCase):
         apply_obsidian_configuration(self.vault,confirmation=plan['confirmation'],registry_path=self.registry,client_id='synthetic-client')
 
     def start(self, selections=None, references=None, guidance=None):
-        _,record=prepare_direction_stage(registry_path=self.registry,runs_root=self.runs,
+        _,record=prepare_direction_stage(analysis_version="slim-1.0", registry_path=self.registry,runs_root=self.runs,
             client_id=None,speaker_mode='neutral',topic_original='购买以后到底还有谁提供帮助',
             reference_paths=references or [],user_thoughts=None,must_keep=[],must_avoid=[],
             method_selections=selections,planning_guidance=guidance,audience_scope='consumer')

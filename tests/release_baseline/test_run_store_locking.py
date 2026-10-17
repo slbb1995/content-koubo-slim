@@ -8,8 +8,8 @@ import time
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[1]
-SKILL_ROOT = ROOT / "Skills" / "content-koubo-slim"
+ROOT = Path(__file__).resolve().parents[2]
+SKILL_ROOT = ROOT / ("Skills" if (ROOT / "Skills/content-koubo-slim").is_dir() else "skills/content-mainline") / "content-koubo-slim"
 
 
 class RunStoreLockingTests(unittest.TestCase):

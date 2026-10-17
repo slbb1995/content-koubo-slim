@@ -1,0 +1,16 @@
+{
+  "contract_version": "content-source-v1",
+  "knowledge_base_id": "KB-0ED186CDB6A30C09",
+  "profiles": [
+    {
+      "profile_id": "PRF-5A97BA016CB0F8FC",
+      "display_name": "Example Speaker",
+      "aliases": ["Speaker"],
+      "object_ref": "05-IP-Profile/example-speaker.md",
+      "status": "active",
+      "is_primary": true,
+      "content_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "revision": 1
+}

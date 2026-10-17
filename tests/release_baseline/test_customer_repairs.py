@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 STANDALONE = (ROOT / 'Skills/content-koubo-slim').is_dir()
 SKILL = ROOT / ('Skills' if STANDALONE else 'skills/content-mainline') / 'content-koubo-slim'
 sys.path.insert(0, str(SKILL))
@@ -36,32 +36,24 @@ def platform_pack():
 
 class CustomerRepairTests(unittest.TestCase):
     def setUp(self):
-        if STANDALONE:
-            from test_idea_first import IdeaFirstTests, material, direction
-            f=IdeaFirstTests();f.setUp();self.addCleanup(f.doCleanups)
-            self.root,self.runs,self.registry,self.vault=f.root,f.runs,f.registry,f.vault
-            store,key,record,inp=f.start([material(f.methods)])
-            result=direction(inp)
-            api.record_direction_result(store=store,task_key=key,analyzer_result=result)
-            api.respond_direction(store=store,task_key=key,method_root=f.methods,decision='认可整版方向')
-            ci,_=api.prepare_context_stage(registry_path=self.registry,runs_root=self.runs,task_record=record)
-            context={k:ci[k] for k in ('context_version','client_id','speaker_mode','approved_direction','selected_external_reference_mechanisms','writer_mode','secondary_tactics')}
-            context.update(topic_original=ci['task_input']['topic_original'],target_audience=ci['approved_direction']['target_audience'],
-                user_thoughts=None,must_keep=[],must_avoid=[],selected_04_method_assets=[],selected_03_business_assets=[],profile_context=None,
-                source_role_policy=SOURCE_ROLE_POLICY,selected_04_content_assets=[{
-                'asset_id':'peer.md','relative_path':'peer.md','source_role':'peer_content_asset',
-                'approved_usage':result['selected_method_assets'][0]['usage'],
-                'source_metadata':ci['selected_04_assets'][0]['source_metadata'],
-                'writer_context':'先说明具体顾虑，再逐项解释服务范围。',
-                'transfer_boundary':result['fused_direction']['generalization_boundary']}])
-            api.record_context_result(registry_path=self.registry,runs_root=self.runs,task_record=record,context_result=context)
-        else:
-            from tests.p4.test_content_koubo_writer_p4 import context_ready_run
-            temp=tempfile.TemporaryDirectory(prefix='koubo-repair-',dir='/private/tmp' if Path('/private/tmp').is_dir() else None);self.addCleanup(temp.cleanup)
-            self.root=Path(temp.name);self.runs=self.root/'runs'
-            self.registry,record,key=context_ready_run(self.root)
-            data=json.loads(self.registry.read_text());self.vault=Path(data['clients']['client-alpha']['vault_root'])
-            store=RunStore(self.runs)
+        from tests.release_baseline.test_idea_first import IdeaFirstTests, material, direction
+        f=IdeaFirstTests();f.setUp();self.addCleanup(f.doCleanups)
+        self.root,self.runs,self.registry,self.vault=f.root,f.runs,f.registry,f.vault
+        store,key,record,inp=f.start([material(f.methods)])
+        result=direction(inp)
+        api.record_direction_result(store=store,task_key=key,analyzer_result=result)
+        api.respond_direction(store=store,task_key=key,method_root=f.methods,decision='认可整版方向')
+        ci,_=api.prepare_context_stage(registry_path=self.registry,runs_root=self.runs,task_record=record)
+        context={k:ci[k] for k in ('context_version','client_id','speaker_mode','approved_direction','selected_external_reference_mechanisms','writer_mode','secondary_tactics')}
+        context.update(topic_original=ci['task_input']['topic_original'],target_audience=ci['approved_direction']['target_audience'],
+            user_thoughts=None,must_keep=[],must_avoid=[],selected_04_method_assets=[],selected_03_business_assets=[],profile_context=None,
+            source_role_policy=SOURCE_ROLE_POLICY,selected_04_content_assets=[{
+            'asset_id':'peer.md','relative_path':'peer.md','source_role':'peer_content_asset',
+            'approved_usage':result['selected_method_assets'][0]['usage'],
+            'source_metadata':ci['selected_04_assets'][0]['source_metadata'],
+            'writer_context':'先说明具体顾虑，再逐项解释服务范围。',
+            'transfer_boundary':result['fused_direction']['generalization_boundary']}])
+        api.record_context_result(registry_path=self.registry,runs_root=self.runs,task_record=record,context_result=context)
         self.store,self.key,self.record=store,key,record
         self.args={'runs_root':self.runs,'task_record':record}
         api.record_draft_result(**self.args,base_draft_version=0,writer_result={'paragraphs':[{'text':'先问清楚需要什么帮助，再判断服务范围。'}]})

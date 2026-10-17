@@ -3,8 +3,8 @@ from pathlib import Path
 from types import SimpleNamespace
 import json,os,subprocess,sys,tempfile,unittest
 from unittest.mock import patch
-ROOT=Path(__file__).resolve().parents[1]
-sys.path.insert(0,str(ROOT/'Skills/content-koubo-slim'))
+ROOT=Path(__file__).resolve().parents[2]
+sys.path.insert(0,str(ROOT/('Skills' if (ROOT/'Skills/content-koubo-slim').is_dir() else 'skills/content-mainline')/'content-koubo-slim'))
 from runtime.feishu_source import FeishuSpace,FeishuRoot,assert_below
 from runtime.feishu_save import save_feishu_pair
 from runtime.feishu_binding import resolve_feishu_binding

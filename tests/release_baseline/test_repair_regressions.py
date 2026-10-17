@@ -3,8 +3,8 @@ import copy,json,os,sys,tempfile,unittest
 from datetime import datetime,timezone
 from pathlib import Path
 from unittest.mock import patch
-ROOT=Path(__file__).resolve().parents[1]
-sys.path.insert(0,str(ROOT/'Skills'/'content-koubo-slim'))
+ROOT=Path(__file__).resolve().parents[2]
+sys.path.insert(0,str(ROOT/('Skills' if (ROOT/'Skills/content-koubo-slim').is_dir() else 'skills/content-mainline')/'content-koubo-slim'))
 from runtime.error_model import SlimRuntimeError
 from runtime.vault_save import save_markdown_pair
 from runtime.content_source import validate_common_manifest,validate_profile_index,validate_common_registry
@@ -78,17 +78,17 @@ class RepairTests(unittest.TestCase):
         self.assertEqual(first['oral_path'].read_text(encoding='utf-8'),'人为改动')
 
     def test_manifest_matches_schema_for_reproduced_invalid_values(self):
-        value=json.loads((ROOT/'examples/content-source-manifest.example.json').read_text(encoding='utf-8'))
+        value=json.loads((Path(__file__).parent/'examples/content-source-manifest.example.json').read_text(encoding='utf-8'))
         for field,bad in [('revision',0),('revision',True),('knowledge_base_name',''),('client_id',''),('locator',{}),('supported_workflows',['content-koubo-slim','bad'])]:
             with self.subTest(field=field,bad=bad),self.assertRaises(SlimRuntimeError): validate_common_manifest({**value,field:bad})
 
     def test_profile_index_revision_and_alias_duplicates(self):
-        value=json.loads((ROOT/'examples/content-profile-index.example.json').read_text(encoding='utf-8'))
+        value=json.loads((Path(__file__).parent/'examples/content-profile-index.example.json').read_text(encoding='utf-8'))
         for bad in (0,True):
             with self.subTest(bad=bad),self.assertRaises(SlimRuntimeError): validate_profile_index({**value,'revision':bad},knowledge_base_id=value['knowledge_base_id'])
 
     def test_registry_absolute_refs_rejected_at_validation(self):
-        value=json.loads((ROOT/'examples/knowledge-base-registry.example.json').read_text(encoding='utf-8'))
+        value=json.loads((Path(__file__).parent/'examples/knowledge-base-registry.example.json').read_text(encoding='utf-8'))
         binding=next(iter(value['bindings'].values()))
         binding['manifest_ref']='C:\\outside\\manifest.json'
         with self.assertRaises(SlimRuntimeError): validate_common_registry(value)
@@ -153,7 +153,7 @@ class RepairTests(unittest.TestCase):
 
     def test_manifest_output_reparse_is_rejected_before_resolve(self):
         from runtime.client_manifest import validate_manifest,resolve_asset_root
-        value=json.loads((ROOT/'examples/content-source-manifest.example.json').read_text(encoding='utf-8'))
+        value=json.loads((Path(__file__).parent/'examples/content-source-manifest.example.json').read_text(encoding='utf-8'))
         manifest=validate_manifest(value)
         target=self.root/manifest.asset_roots['output']; target.mkdir(parents=True)
         real_lstat=Path.lstat

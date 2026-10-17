@@ -51,6 +51,7 @@ from runtime.run_store import RunStore
 from runtime.schema_validation import (
     GATE_A_CHOICES,
     approval_snapshot,
+    select_direction,
     build_gate_a,
     build_writer_reference_blueprint,
     canonical_json_hash,
@@ -273,6 +274,7 @@ def prepare_direction_stage(
     profile: str | None = None,
     method_selections: list[dict[str, Any]] | None = None,
     planning_guidance: list[dict[str, Any]] | None = None,
+    analysis_version: str = "slim-1.1",
     audience_scope: str | None = None,
     allow_experimental: bool = False,
     output_count: int = 1,
@@ -341,6 +343,14 @@ def prepare_direction_stage(
             workflow_stage="正在寻找本题可用的库内资料",
             recovery_action="由 Agent 用 discover-methods 查看当前库同行和结构元数据，按本题目的选择后重试；确实缺资料时说明缺口，不要求你先懂结构编号。")
     guidance = _load_planning_guidance(method_root, planning_guidance or [], audience_scope, allow_experimental)
+    if analysis_version not in {"slim-1.0", "slim-1.1"}:
+        raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "content_koubo_slim", detail="unsupported direction contract")
+    if analysis_version == "slim-1.1":
+        required = [g for g in guidance if g["asset_id"] == "ORAL-GUIDE-001"]
+        if len(required) != 1 or required[0].get("asset_version") != "1.1.0":
+            raise SlimRuntimeError("SLIM_ANALYZER_INPUT_INVALID", "content_koubo_slim",
+                detail="ORAL-GUIDE-001 version 1.1.0 is required before starting a new direction",
+                recovery_action="当前库缺少新版通用指引。请先准备并选入对应的 04 方法资料；不自动覆盖知识库或静默降级。")
     business_identity = {
         "client_id": resolved_client_id,
         "speaker_mode": resolved_mode,
@@ -358,7 +368,8 @@ def prepare_direction_stage(
         business_identity["library_input_sha256"] = canonical_json_hash({
             "candidates": candidates, "user_thoughts": user_thoughts,
             "must_keep": must_keep, "must_avoid": must_avoid,
-            "audience_scope": audience_scope, "allow_experimental": allow_experimental, "planning_guidance": guidance})
+            "audience_scope": audience_scope, "allow_experimental": allow_experimental, "planning_guidance": guidance,
+            **({"analysis_version": analysis_version} if analysis_version == "slim-1.1" else {})})
     if batch_item is not None:
         business_identity["batch_item_sha256"] = batch_item_digest(batch_item)
     store = RunStore(runs_root)
@@ -404,6 +415,8 @@ def prepare_direction_stage(
         "task_key_record": state["task_key_record"],
         "task_key_retry_policy": state["task_key_retry_policy"],
     }
+    if analysis_version == "slim-1.1":
+        frozen_input["analysis_version"] = analysis_version
     if location.common_contract:
         frozen_input.update(
             {
@@ -432,7 +445,7 @@ def prepare_direction_stage(
     store.freeze_task_input(task_key, frozen_input)
     analyzer_input = validate_analyzer_input(
         {
-            "analysis_version": "slim-1.0",
+            "analysis_version": analysis_version,
             "topic_original": topic_original,
             "topic_normalized": topic_normalized,
             "topic_normalized_source": "system_generated",
@@ -601,6 +614,8 @@ def respond_direction(
     decision: str,
     feedback: str | None = None,
     identity_changes: dict[str, Any] | None = None,
+    selected_option_id: str | None = None,
+    direction_version: int | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     state = store.get_task(task_key)
     decision = _normalize_decision(decision)
@@ -622,6 +637,8 @@ def respond_direction(
             artifacts_exist=store.artifacts_exist(task_key),
             artifacts_preserved=store.artifacts_exist(task_key),
         )
+    if decision != "认可整版方向" and selected_option_id is not None:
+        raise SlimRuntimeError("SLIM_DIRECTION_RESPONSE_INVALID", "content_koubo_slim", detail="option selection is only valid with approval")
     if decision == "需要修改":
         revised_input = _request_revision(
             store, task_key, feedback or "", identity_changes or {}
@@ -665,7 +682,13 @@ def respond_direction(
             None,
         )
 
+    requested_version = direction_version
     direction_version, direction, _ = store.latest_version(task_key, "direction")
+    if (store.run_directory(task_key) / "artifacts" / f"analyzer_input_v{direction_version + 1}.json").exists():
+        raise SlimRuntimeError("SLIM_DIRECTION_RESPONSE_INVALID", "content_koubo_slim", detail="a requested revision must be generated and shown before approval")
+    if direction["analyzer_result"].get("analysis_version") == "slim-1.1" and requested_version != direction_version:
+        raise SlimRuntimeError("SLIM_DIRECTION_RESPONSE_INVALID", "content_koubo_slim",
+                               detail="approval must name the currently displayed direction version")
     if (
         direction.get("direction_version") != direction_version
         or direction.get("analyzer_input_version") != direction_version
@@ -680,15 +703,18 @@ def respond_direction(
             artifacts_exist=True,
             artifacts_preserved=True,
         )
-    result = direction["analyzer_result"]
+    result = validate_analyzer_result(direction["analyzer_result"], _analyzer_input_version(store, task_key, direction_version))
+    if direction["gate_a"] != build_gate_a(result, direction_version):
+        raise SlimRuntimeError("SLIM_DIRECTION_RESPONSE_INVALID", "content_koubo_slim", detail="displayed Gate A differs from its Analyzer result")
+    selected = select_direction(result, selected_option_id)
     _verify_planning_guidance(store.read_task_input(task_key), method_root)
-    for selected in result["selected_method_assets"]:
+    for asset in selected["selected_method_assets"]:
         read_method_asset(
             method_root,
-            selected["relative_path"],
-            expected_sha256=selected["page_sha256"],
+            asset["relative_path"],
+            expected_sha256=asset["page_sha256"],
         )
-    approved = approval_snapshot(result, direction["gate_a"], direction_version)
+    approved = approval_snapshot(result, direction["gate_a"], direction_version, selected_option_id)
     store.write_fixed_json(task_key, "approved_direction.json", approved)
     store.transition(task_key, "direction_approved")
     return (
@@ -696,7 +722,7 @@ def respond_direction(
             "status": "waiting",
             "status_label": "方向已确认",
             "workflow_stage": "正在准备客户内容资料",
-            "message": "整版方向已冻结，尚未读取 03/05，也没有生成正文。",
+            "message": "已选方向已冻结，尚未装配正文资料，也没有生成正文。",
             "next_action": "准备当前 Run 的客户内容资料；不要改写已确认方向。",
             "run_exists": True,
             "run_created_now": False,
@@ -744,9 +770,12 @@ def prepare_context_stage(
         "secondary_tactics",
         "business_context_needs",
     }
+    new_contract = frozen.get("analysis_version") == "slim-1.1"
+    if new_contract:
+        expected_approval_fields.add("selected_option_id")
     if (
         set(approved) != expected_approval_fields
-        or approved.get("approval_version") != "content-koubo-slim-approved-direction-v1"
+        or approved.get("approval_version") != ("content-koubo-slim-approved-direction-v2" if new_contract else "content-koubo-slim-approved-direction-v1")
         or approved.get("speaker_mode") != frozen.get("speaker_mode")
         or approved.get("approved_gate_a", {}).get("direction_version")
         != approved.get("direction_version")
@@ -783,7 +812,13 @@ def prepare_context_stage(
     analyzer_result = validate_analyzer_result(
         direction.get("analyzer_result"), analyzer_input
     )
-    writer_reference_blueprint = build_writer_reference_blueprint(analyzer_result)
+    if build_gate_a(analyzer_result, direction_version) != direction["gate_a"] or approved != approval_snapshot(
+        analyzer_result, direction["gate_a"], direction_version, approved.get("selected_option_id")
+    ):
+        raise SlimRuntimeError("SLIM_CONTEXT_INPUT_INVALID", "content_koubo_slim",
+                               detail="approval no longer matches the selected complete direction")
+    selected_result = select_direction(analyzer_result, approved.get("selected_option_id"))
+    writer_reference_blueprint = build_writer_reference_blueprint(selected_result)
 
     registry = load_effective_registry(registry_path)
     location = resolve_client(registry, frozen.get("binding_id") or frozen["client_id"])
@@ -1417,6 +1452,7 @@ def prepare_package_stage(
     target_platforms: list[str] | tuple[str, ...] | None = None,
     revision_scope: list[str] | tuple[str, ...] | None = None,
     _legacy_compatibility: bool = False,
+    _persist_request: bool = True,
 ) -> tuple[dict[str, Any], str]:
     """Prepare P5 from the approved body plus style-only frozen projections."""
 
@@ -1518,7 +1554,7 @@ def prepare_package_stage(
             detail="platform-scoped revision cannot add, remove, or reorder target platforms",
             workflow_stage="正在生成配套文案", run_exists=True,
             artifacts_exist=True, artifacts_preserved=True)
-    if not _legacy_compatibility and frozen_request is None:
+    if _persist_request and not _legacy_compatibility and frozen_request is None:
         frozen_request = {
             "contract_version": "content-koubo-slim-package-request-v2",
             "target_package_version": next_version,
@@ -1588,6 +1624,7 @@ def record_package_result(
         target_platforms=target_platforms,
         revision_scope=revision_scope,
         _legacy_compatibility=legacy_result,
+        _persist_request=False,
     )
     current_draft_version = package_input["approved_draft"]["draft_version"]
     # Old first-draft callers remain compatible; revised drafts require the
@@ -1750,6 +1787,87 @@ def _verify_source_snapshot_before_save(
             )
 
 
+def _verified_prior_legacy_pair(*, store, task_key, version, approved_draft,
+                                draft_approval, output_root, output_template,
+                                client_id, item_suffix, backend):
+    """Reuse only an acknowledged v1 pair bound to this approved body/package."""
+    draft_version = approved_draft['draft_version']
+    directory = store.run_directory(task_key) / ('feishu-save' if backend == 'feishu' else 'local-save') / f'v{draft_version}'
+    receipt_path = directory / ('feishu-save.json' if backend == 'feishu' else 'local-save.json')
+    def fail():
+        raise SlimRuntimeError('SLIM_SAVE_FAILED', 'content_koubo_slim',
+            detail='legacy save acknowledgement is missing, changed, or not bound to approved content',
+            workflow_stage='等待你确认并保存', run_exists=True,
+            artifacts_exist=True, artifacts_preserved=True)
+
+    from runtime.vault_save import _reject_reparse, _versioned_stem
+    _reject_reparse(receipt_path)
+    try:
+        if not receipt_path.exists():
+            # An old approval may have reached saving before the receipt was
+            # lost. Never reinterpret that unknown outcome as a fresh save.
+            for number in range(version - 1, 0, -1):
+                old = store.read_fixed_json(task_key, f'package_v{number}.json')
+                if (old.get('contract_version') == 'content-koubo-slim-package-v1'
+                        and old.get('based_on_draft_version') == draft_version
+                        and (store.run_directory(task_key) / 'artifacts' /
+                             _approval_filename(store, task_key, 'package', number)).exists()):
+                    fail()
+            return None
+        state = store._read_json(receipt_path)
+        if not isinstance(state.get('result'), dict):
+            fail()
+        old_approval = old_content = None
+        for number in range(version - 1, 0, -1):
+            old = store.read_fixed_json(task_key, f'package_v{number}.json')
+            if (old.get('contract_version') != 'content-koubo-slim-package-v1'
+                    or old.get('based_on_draft_version') != draft_version
+                    or old.get('based_on_draft_sha256') != draft_approval['draft_sha256']):
+                continue
+            previous = store.read_fixed_json(task_key, _approval_filename(store, task_key, 'package', number))
+            content = validate_publish_pack_result(old['content'])
+            if (previous.get('approval_version') != 'content-koubo-slim-approved-package-v1'
+                    or previous.get('package_version') != number
+                    or previous.get('package_sha256') != canonical_json_hash(old)
+                    or previous.get('draft_version') != draft_version
+                    or previous.get('draft_sha256') != draft_approval['draft_sha256']
+                    or previous.get('decision') != '确认并保存'
+                    or previous.get('publish_status') != 'not_requested'
+                    or previous.get('selected_cover_title') not in content['cover_titles']
+                    or previous.get('selected_publish_title') not in content['publish_titles']):
+                fail()
+            old_approval, old_content = previous, content
+            break
+        if old_approval is None:
+            fail()
+        markdown = _package_markdown(old_approval, old_content)
+        if backend == 'feishu':
+            import hashlib
+            from runtime.feishu_client import canonical_markdown
+            from runtime.feishu_save import verify_saved_feishu_pair
+            stem = _versioned_stem(old_approval['selected_publish_title'], draft_version, item_suffix)
+            request = state['request']
+            hashes = [hashlib.sha256(canonical_markdown(body).encode('utf-8')).hexdigest()
+                      for body in (approved_draft['body'], markdown)]
+            if (request.get('client_id') != client_id
+                    or request.get('titles') != [stem + '-口播稿', stem + '-配套文案']
+                    or request.get('sha') != hashes
+                    or not verify_saved_feishu_pair(output_root=output_root,
+                        output_template=output_template, receipt_dir=directory,
+                        expected_result=state['result'], draft_version=draft_version,
+                        item_suffix=item_suffix)):
+                fail()
+            return state['result']
+        # The completed receipt is checked above; this existing path verifies
+        # exact request, inode, destination and both byte hashes before reuse.
+        return save_markdown_pair(output_root=output_root, output_template=output_template,
+            client_id=client_id, selected_publish_title=old_approval['selected_publish_title'],
+            oral_body=approved_draft['body'], package_markdown=markdown,
+            receipt_dir=directory, draft_version=draft_version, item_suffix=item_suffix)
+    except (KeyError, TypeError, ValueError, OSError):
+        fail()
+
+
 def _save_approved_package(
     *,
     registry_path: str | Path,
@@ -1869,6 +1987,13 @@ def _save_approved_package(
                     continue
             if candidates:
                 prior_saved = store._read_json(max(candidates)[1])
+            else:
+                prior_saved = _verified_prior_legacy_pair(
+                    store=store, task_key=task_key, version=version,
+                    approved_draft=approved_draft, draft_approval=draft_approval,
+                    output_root=output_root, output_template=manifest.output_template,
+                    client_id=save_arguments['client_id'], item_suffix=save_arguments['item_suffix'],
+                    backend=location.backend_type)
         revision_dir = f"d{draft_version}-p{version}" if is_v2 else f"v{draft_version}"
         receipt_root = store.run_directory(task_key) / ("feishu-save" if location.backend_type == "feishu" else "local-save") / revision_dir
         if prior_saved is not None:
@@ -2120,6 +2245,7 @@ def _start(args: argparse.Namespace) -> dict[str, Any]:
         profile=args.profile,
         method_selections=selections,
         planning_guidance=guidance,
+        analysis_version=args.analysis_version,
         audience_scope=args.audience_scope,
         allow_experimental=args.allow_experimental,
     )
@@ -2162,7 +2288,8 @@ def _load_planning_guidance(root, selections, audience_scope, allow_experimental
         if method_kind(asset) not in {"selection_guide", "index", "methodology"} or asset.asset_id in ids or not method_is_usable(asset, audience_scope, allow_experimental):
             raise SlimRuntimeError("SLIM_METHOD_ASSET_INVALID", "content_koubo_slim", detail="not permitted planning guidance")
         ids.add(asset.asset_id)
-        result.append({**item, "asset_id": asset.asset_id, "content": complete_method_text(asset)})
+        result.append({**item, "asset_id": asset.asset_id, "content": complete_method_text(asset),
+                       **({"asset_version": asset.metadata["asset_version"]} if "asset_version" in asset.metadata else {})})
     return result
 
 
@@ -2220,7 +2347,7 @@ def _preflight(args: argparse.Namespace) -> dict[str, Any]:
     return dict(status="ready", workflow_stage="启动前校验已通过", backend=location.backend_type,
                 profile=selected["display_name"] if selected else None,
                 run_exists=False, run_created_now=False, artifacts_exist=False, wrote=False,
-                message="知识库和讲述者已验证；开始内容任务仍需 1—5 篇参考。")
+                message="知识库和讲述者已验证；新版方向仍需通用指引，并至少准备外部对标或可用库内蓝图。")
 
 
 def _record_direction(args: argparse.Namespace) -> dict[str, Any]:
@@ -2277,6 +2404,8 @@ def _respond_direction(args: argparse.Namespace) -> dict[str, Any]:
         method_root=method_root,
         decision=args.decision,
         feedback=args.feedback,
+        selected_option_id=args.selected_option,
+        direction_version=args.direction_version,
         identity_changes=(
             {"task_identity": "changed"} if args.task_identity_changed else {}
         ),
@@ -2516,6 +2645,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_runs_root_argument(start)
     start.add_argument("--client-id")
     start.add_argument("--binding-id")
+    start.add_argument("--analysis-version", choices=("slim-1.1", "slim-1.0"), default="slim-1.1", help="new design contract; legacy only when explicitly requested")
     start.add_argument("--profile", help="active Profile id, display name, or unique alias")
     start.add_argument("--speaker-mode", choices=("personal_ip", "company_brand", "neutral"))
     start.add_argument("--topic-original", required=True)
@@ -2549,6 +2679,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--decision", required=True, type=_normalize_decision, choices=GATE_A_CHOICES
     )
     respond.add_argument("--feedback")
+    respond.add_argument("--selected-option", help="human-selected option id from the displayed Gate A")
+    respond.add_argument("--direction-version", type=int, help="version of the Gate A actually shown to the human")
     respond.add_argument(
         "--task-identity-changed", action="store_true", help=argparse.SUPPRESS
     )

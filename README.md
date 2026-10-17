@@ -1,12 +1,14 @@
 # Content 口播 Slim
 
+**当前统一版本：1.5.0。下载、安装和更新只使用本仓库。** 本版同时保留新版方向设计与 1.4.0 三平台能力，完整包附带新任务必需的公共方法资料，不需要再分别下载两套口播技能。
+
 Content 口播 Slim 是一套短视频口播内容工作流。
 
 它从明确或已确认默认的 Obsidian 或飞书知识库中选择本次 IP，把客户的一段想法结合少量内容资料写成口播，依次完成方向、正文、三平台配套文案三次真人确认。每篇为抖音、小红书、视频号各生成一套标题、发布正文和 Tag，首次保存口播与配套两份产物；保存后可只修订配套并保留旧版。全部结果保持未发布。
 
 支持一次提出多篇口播要求：每篇分别拆解方向、确认、修改、生成配套和保存，同名标题也不会合并。多篇可集中展示供确认；未展示或未获明确确认的稿件不会自动推进。一个文档包含多篇对标时，按原文篇目准备参考，不把合集当成单篇。
 
-本次更新只涉及这五个口播 Skill。现有知识库资料、ZSK 和公众号流程不需要随本版本修改。内部批次与参考映射的执行说明分别见 [多篇任务](Skills/content-koubo-slim/references/batch-tasks.md) 和 [逐篇参考](Skills/content-koubo-slim/references/reference-pieces.md)。
+本次运行更新只涉及这五个口播 Skill。从 1.4.0 升级时，另需检查知识库中的公共方法资料是否为 1.1.0，详见下文；ZSK Skill 和公众号流程不需要整套替换。内部批次与参考映射的执行说明分别见 [多篇任务](Skills/content-koubo-slim/references/batch-tasks.md) 和 [逐篇参考](Skills/content-koubo-slim/references/reference-pieces.md)。
 
 ## 仓库边界
 
@@ -51,10 +53,19 @@ Content 口播 Slim 是一套短视频口播内容工作流。
 
 “随便”“差不多”等模糊说法不算确认。
 
+## 1.5.0 合并内容
+
+- 默认一版完整方向，确有必要时最多两版；选择必须绑定本次展示的方向版本与具体选项。
+- 获批的切入、开头、正文推进、收尾与证据边界原样传递至唯一 Context 和 Writer。
+- 保留抖音、小红书、视频号各自的标题、发布正文和 Tag；保存后可以只修改指定平台字段，保留原口播和旧配套。
+- 旧方向合同、旧通用配套、旧三平台任务及保存回执继续恢复。旧保存结果不确定或被修改时停止，不把缺失回执当成新建许可。
+- 修复迟到/无效配套结果改变后续修改请求的问题；旧 v1 已保存任务升级三平台时核验并复用原口播，避免同名冲突和重复正文。
+
 ## 当前版本
 
 | 版本 | Skill 数量 | 功能 |
 |---|---:|---|
+| 1.5.0 | 5 | 方向设计 + 三平台配套 + 旧任务保存迁移修复 |
 | 1.4.0 | 5 | 三平台配套、平台局部修订、正文/配套双版本保存恢复 |
 | 1.3.0 | 5 | 批量口播、逐篇参考、飞书接入与保存恢复 |
 
@@ -91,17 +102,19 @@ LICENSE
 ~~~bash
 git clone https://github.com/slbb1995/content-koubo-slim.git
 cd content-koubo-slim
-python3 tools/verify.py
+python3 -B tools/verify.py
 ~~~
 
 验证未通过就停止，不要继续安装。
+
+完整开发测试还需要 `python3 -m pip install -r requirements-test.txt`，否则可选 JSON Schema 检查会显示跳过。运行口播 CLI 本身只使用 Python 标准库。
 
 然后把下面整段交给 Codex 或 WorkBuddy：
 
 ~~~text
 请完整读取当前 content-koubo-slim 仓库的 README.md，只安装 Content 口播 Slim。
 
-1. 先运行 python3 tools/verify.py；验证失败立即停止。
+1. 先运行 python3 -B tools/verify.py；验证失败立即停止。
 2. 检查当前 AI 宿主真实的 Skills 根目录，不要猜路径。
 3. 只安装仓库 Skills 下这 5 个目录：
    content-koubo-slim、content-koubo-analyzer、
@@ -110,14 +123,28 @@ python3 tools/verify.py
 4. 新名称不存在时才能 create-only 安装；已经存在时先比较差异，
    未经我确认不要覆盖。
 5. 安装后回读 5 个 SKILL.md、content-koubo-slim 的 Runtime、Schema 和脚本。
-6. 如果发现旧版五个 content-* Skill，先保留，不要删除；等新配置和真实测试通过后，
+6. 新任务需要 ORAL-GUIDE-001 / 1.1.0。检查我明确指定的知识库 04 是否已具备；
+   若未更新，使用本包 public-methods/口播结构 中的公共资料，先备份、核对差异，
+   保留客户自行增加或修改的内容；知识库位置不明确或同名内容存在自定义冲突时先问我。
+   不更新整个 ZSK Skill，不覆盖客户 03/05，不自动把普通 Obsidian 根目录当作客户库。
+7. 如果发现旧版五个 content-* Skill，先保留，不要删除；等新配置和真实测试通过后，
    再经我确认移动到当前宿主真实的 disabled Skills 目录。
-7. 不安装仓库之外的其他 Skill，不读取业务正文，不生成口播，不保存成稿，
+8. 不安装仓库之外的其他 Skill，不读取业务正文，不生成口播，不保存成稿，
    不上传，不发布。
-8. 最后告诉我是否需要重新打开任务。
+9. 最后告诉我运行文件、知识库依赖、真实任务各自的检查结果。
 ~~~
 
 不要只复制一个 `SKILL.md`。完整运行需要 5 个 Skill，以及 `content-koubo-slim` 目录内的 Runtime、Schema 和脚本。
+
+## 公共方法资料与版本来源
+
+`public-methods/package.json` 列出随包的 24 份公共方法文档及哈希，版本为 1.1.0。新版方向需要其中的 `ORAL-GUIDE-001`；缺失时会在创建任务前明确停止。公共资料应进入所选知识库 Manifest 授权的 04 方法根内的 `口播结构/`，不能混入 Skills 或客户业务资料。
+
+更新资料前备份目标；只处理清单中的公共文件，保留其他文件。目标同名文件有客户修改时先比较并保留客户修改，不按文件名盲目覆盖。旧任务继续使用原冻结合同与资料；运行中修改它已冻结的资料会被识别为来源变化。
+
+`SOURCE.json` 记录本包对应的开发提交、公共方法资料提交及全部导出文件哈希；`release-manifest.json` 记录五个运行技能。验证器同时检查两份清单，重新生成运行清单不能掩盖与开发源不同的文件。
+
+维护分工：源码在 `content-workflow-skills`；本仓库负责统一下载与安装，由源码仓的 `tools/export_koubo_release.py` 从固定干净提交导出。以后不在两个仓库独立开发同一份运行代码。客户只需当前仓库，不需要理解开发仓的其他历史技能。
 
 ## 首次配置与自动绑定
 
@@ -225,13 +252,13 @@ P5 默认目标平台为抖音、小红书、视频号，每个平台输出一�
 
 内部接口为 `discover-methods` → 完整回读候选 → `start --method-selection`。选择文件只供 Agent 使用，详见 `Skills/content-koubo-slim/references/idea-first-materials.md`。旧 CLI 不传选择文件仍保留字面检索兼容；旧 Run、三次真人确认、唯一 Context 和首次双文件未发布保存保持兼容。
 
-## 1.4.0 发行校验
+## 发行校验
 
 发布前必须完成：
 
 ```bash
-python3 tools/build_release_manifest.py
-python3 tools/verify.py
+python3 -m pip install -r requirements-test.txt
+python3 -B tools/verify.py
 ```
 
 其中需要实际覆盖：五个 Skill 和发行清单一致；新旧配套合同均可读；三平台字段与正文绑定有效；平台局部修改不会改变其他平台；保存后配套修订复用已核验口播；本地与飞书的回读、已确认失败重试和未知结果停止；旧 v1 Run 与回执恢复；同名批次不串稿；三行业、三种内容目的及三种讲述模式的合成样稿不串客户。格式通过不能替代合成样稿的人工内容检查，合成结果也不能表述为真实流量验证。
@@ -246,7 +273,7 @@ python3 tools/verify.py
 
 ## 更新到修复版
 
-在仓库目录先检查 `git status --short`。有本地改动先保留并比较，不覆盖；干净时运行 `git pull --ff-only`，然后 `python3 tools/verify.py`。
+在仓库目录先检查 `git status --short`。有本地改动先保留并比较，不覆盖；干净时运行 `git pull --ff-only`，然后 `python3 -B tools/verify.py`。
 
 验证通过后，完整更新上述 5 个 Skill 目录，并先将旧目录备份到宿主不加载的位置。保留知识库、Registry、Manifest、Profile 索引和历史任务，不把 Git 拉取成功当作安装完成。更新后按 release manifest 逐文件核对实际宿主目录。
 
@@ -262,7 +289,7 @@ Codex 使用 `--host codex`；自定义安装环境使用 `--host-root /已确�
 
 ## 更新与安全边界
 
-- 更新前重新运行 `python3 tools/verify.py`；
+- 更新前重新运行 `python3 -B tools/verify.py`；
 - 同名 Skill 目录不得静默覆盖；
 - Registry、Manifest、Profile 索引、参考来源或当前 Run 不可信时立即停止；
 - Gate 后任何已冻结 03/04/05 资料或绑定哈希变化，保留旧产物并停止；

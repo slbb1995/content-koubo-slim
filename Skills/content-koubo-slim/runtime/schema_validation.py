@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 import re
 from pathlib import PurePosixPath
 from typing import Any, Iterable
@@ -156,7 +157,7 @@ def validate_analyzer_input(value: Any) -> dict[str, Any]:
     code = "SLIM_ANALYZER_INPUT_INVALID"
     if not isinstance(value, dict) or set(value) - {"planning_guidance"} != ANALYZER_INPUT_FIELDS:
         _fail(code, "analyzer input fields do not match the single contract")
-    if value["analysis_version"] != "slim-1.0":
+    if value["analysis_version"] not in {"slim-1.0", "slim-1.1"}:
         _fail(code, "unsupported analysis_version")
     _nonempty(value["topic_original"], "topic_original", code=code)
     _nonempty(value["topic_normalized"], "topic_normalized", code=code)
@@ -231,7 +232,7 @@ def validate_analyzer_input(value: Any) -> dict[str, Any]:
     if not isinstance(guidance, list) or len(guidance) > 3:
         _fail(code, "planning guidance exceeds three bounded documents")
     for item in guidance:
-        if not isinstance(item, dict) or set(item) != {"asset_id", "relative_path", "page_sha256", "content", "reason"}:
+        if not isinstance(item, dict) or set(item) - {"asset_version"} != {"asset_id", "relative_path", "page_sha256", "content", "reason"}:
             _fail(code, "invalid planning guidance fields")
         _relative_markdown(item["relative_path"], "planning guidance path", code=code)
         for field in ("asset_id", "content", "reason"):
@@ -239,6 +240,10 @@ def validate_analyzer_input(value: Any) -> dict[str, Any]:
         if not isinstance(item["page_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", item["page_sha256"]):
             _fail(code, "invalid planning guidance hash")
 
+    if value["analysis_version"] == "slim-1.1":
+        required = [g for g in guidance if g["asset_id"] == "ORAL-GUIDE-001"]
+        if len(required) != 1 or required[0].get("asset_version") != "1.1.0":
+            _fail(code, "new directions require ORAL-GUIDE-001 version 1.1.0; no silent legacy fallback")
     revision = value["revision_request"]
     if revision is not None:
         if not isinstance(revision, dict) or set(revision) != {
@@ -279,7 +284,136 @@ def _exact_source_phrases(references: list[dict[str, Any]]) -> set[str]:
     return phrases
 
 
-def validate_analyzer_result(
+def design_structure(design: dict[str, Any]) -> list[str]:
+    return [design["opening"], *[step["content"] for step in design["body_steps"]], design["ending"]]
+
+
+def validate_writing_design(design: Any, *, code: str) -> None:
+    fields = {"angle", "opening", "body_steps", "ending", "method_uses", "evidence_boundary"}
+    if not isinstance(design, dict) or set(design) != fields:
+        _fail(code, "writing_design must preserve angle, opening, progression and ending")
+    for field in ("angle", "opening", "ending", "evidence_boundary"):
+        _nonempty(design[field], field, code=code)
+    if not isinstance(design["body_steps"], list) or not design["body_steps"]:
+        _fail(code, "writing_design needs concrete body progression")
+    for step in design["body_steps"]:
+        if not isinstance(step, dict) or set(step) != {"content", "reason", "evidence"}:
+            _fail(code, "each body step needs contribution, connection and evidence boundary")
+        for key in step:
+            _nonempty(step[key], key, code=code)
+    if not isinstance(design["method_uses"], list):
+        _fail(code, "method_uses must be a list; it may be empty")
+    seen = set()
+    for use in design["method_uses"]:
+        if not isinstance(use, dict) or set(use) != {"asset_id", "application"}:
+            _fail(code, "method use fields are invalid")
+        for key in use:
+            _nonempty(use[key], key, code=code)
+        if use["asset_id"] in seen:
+            _fail(code, "method use is duplicated")
+        seen.add(use["asset_id"])
+
+
+def select_direction(result: dict[str, Any], option_id: str | None = None) -> dict[str, Any]:
+    """Project exactly the human-selected option; never choose a recommendation implicitly."""
+    if result.get("analysis_version") != "slim-1.1":
+        if option_id is not None:
+            _fail("SLIM_DIRECTION_RESPONSE_INVALID", "legacy direction has no option id")
+        return result
+    options = result["direction_options"]
+    if option_id is None and len(options) == 1:
+        option_id = options[0]["option_id"]
+    matches = [option for option in options if option["option_id"] == option_id]
+    if len(matches) != 1:
+        _fail("SLIM_DIRECTION_RESPONSE_INVALID", "select one displayed direction explicitly before approval")
+    selected = deepcopy(matches[0])
+    selected["selected_option_id"] = selected.pop("option_id")
+    selected.update(analysis_version="slim-1.0", reference_analyses=deepcopy(result["reference_analyses"]))
+    return selected
+
+
+def validate_analyzer_result(value: Any, analyzer_input: dict[str, Any]) -> dict[str, Any]:
+    validate_analyzer_input(analyzer_input)
+    if analyzer_input["analysis_version"] == "slim-1.0":
+        return _validate_legacy_analyzer_result(value, analyzer_input)
+    code = "SLIM_ANALYZER_OUTPUT_INVALID"
+    fields = {"analysis_version", "reference_analyses", "method_judgment", "direction_options",
+              "recommended_option_id", "recommendation_reason"}
+    if not isinstance(value, dict) or set(value) != fields or value["analysis_version"] != "slim-1.1":
+        _fail(code, "new direction result must use the slim-1.1 contract")
+    judgment = value["method_judgment"]
+    if not isinstance(judgment, dict) or set(judgment) != {
+        "intent", "decision", "reason", "angles", "unused_methods_reason", "material_gaps", "guidance_ids"
+    }:
+        _fail(code, "method judgment is missing or incomplete")
+    if judgment["decision"] not in ("retain", "refine", "alternative"):
+        _fail(code, "invalid method judgment decision")
+    for key in ("intent", "reason", "unused_methods_reason"):
+        _nonempty(judgment[key], key, code=code)
+    for key in ("angles", "material_gaps", "guidance_ids"):
+        _string_list(judgment[key], key, code=code)
+    guidance_ids = {g["asset_id"] for g in analyzer_input["planning_guidance"]}
+    if "ORAL-GUIDE-001" not in judgment["guidance_ids"] or not set(judgment["guidance_ids"]) <= guidance_ids:
+        _fail(code, "method judgment must cite the supplied common guide, never unread guidance")
+    options = value["direction_options"]
+    if not isinstance(options, list) or not 1 <= len(options) <= 2:
+        _fail(code, "one or two complete directions are required")
+    ids = []
+    for option in options:
+        required = (ANALYZER_OUTPUT_FIELDS - {"analysis_version", "reference_analyses"}) | {"option_id", "reference_usage"}
+        if not isinstance(option, dict) or set(option) != required:
+            _fail(code, "direction option fields are invalid")
+        ids.append(_nonempty(option["option_id"], "option_id", code=code))
+    if len(set(ids)) != len(ids) or value["recommended_option_id"] not in ids:
+        _fail(code, "direction option ids or recommendation are invalid")
+    _nonempty(value["recommendation_reason"], "recommendation_reason", code=code)
+    if len(options) == 2 and options[0]["fused_direction"] == options[1]["fused_direction"]:
+        _fail(code, "two identical directions are not a meaningful choice")
+    for option in options:
+        selected = select_direction(value, option["option_id"])
+        fused = selected.get("fused_direction")
+        if not isinstance(fused, dict) or "writing_design" not in fused:
+            _fail(code, "direction option requires writing_design")
+        design = fused["writing_design"]
+        validate_writing_design(design, code=code)
+        if fused.get("structure_plan") != design_structure(design):
+            _fail(code, "structure_plan must be the exact projection of writing_design")
+        usage = selected["reference_usage"]
+        if not isinstance(usage, list):
+            _fail(code, "reference_usage must be a list")
+        for use in usage:
+            if not isinstance(use, dict) or set(use) != {"reference_id", "adopted_value", "application", "not_used"}:
+                _fail(code, "reference usage must identify concrete selected and unused mechanisms")
+            for key in use:
+                _nonempty(use[key], key, code=code)
+        if [u["reference_id"] for u in usage] != [r["reference_id"] for r in analyzer_input["references"]]:
+            _fail(code, "each option must account for all frozen references")
+        # Reuse all existing identity, provenance, budget and readable-projection checks.
+        legacy = deepcopy(selected)
+        legacy.pop("selected_option_id")
+        legacy.pop("reference_usage")
+        legacy["fused_direction"].pop("writing_design")
+        legacy_input = {**analyzer_input, "analysis_version": "slim-1.0"}
+        _validate_legacy_analyzer_result(legacy, legacy_input)
+        known_methods = guidance_ids | {x["asset_id"] for x in selected["selected_method_assets"]}
+        if any(use["asset_id"] not in known_methods for use in design["method_uses"]):
+            _fail(code, "writing design cites unselected or unread material")
+        exposed = _normalized_phrase("\n".join(_walk_strings(design)) + "\n" + "\n".join(build_writer_reference_blueprint(selected)))
+        for phrase in _exact_source_phrases(analyzer_input["references"]):
+            if phrase in exposed:
+                _fail(code, "selected direction copied identifiable source prose")
+        for analysis in value["reference_analyses"]:
+            for fragment in analysis["prohibited_transfers"]:
+                normalized = _normalized_phrase(fragment)
+                # The prohibition itself remains visible; inspect adoption and design only.
+                adopted = _normalized_phrase("\n".join(_walk_strings(design)) + "\n" +
+                    "\n".join(u["adopted_value"] + u["application"] for u in usage))
+                if len(normalized) >= 6 and normalized in adopted:
+                    _fail(code, "selected design transferred prohibited source content")
+    return value
+
+
+def _validate_legacy_analyzer_result(
     value: Any, analyzer_input: dict[str, Any]
 ) -> dict[str, Any]:
     code = "SLIM_ANALYZER_OUTPUT_INVALID"
@@ -476,6 +610,18 @@ def validate_analyzer_result(
 
 
 def build_gate_a(result: dict[str, Any], direction_version: int) -> dict[str, Any]:
+    if result.get("analysis_version") == "slim-1.1":
+        return {
+            "direction_version": direction_version,
+            "recommended_option_id": result["recommended_option_id"],
+            "recommendation_reason": result["recommendation_reason"],
+            "direction_options": [
+                {"option_id": option["option_id"],
+                 **build_gate_a(select_direction(result, option["option_id"]), direction_version)}
+                for option in result["direction_options"]
+            ],
+            "choices": list(GATE_A_CHOICES),
+        }
     readable = result["customer_readable_direction"]
     return {
         "direction_version": direction_version,
@@ -494,6 +640,8 @@ def build_gate_a(result: dict[str, Any], direction_version: int) -> dict[str, An
         "business_context_needs": result["business_context_needs"],
         "generalization_boundary": readable["generalization_boundary"],
         "choices": list(GATE_A_CHOICES),
+        **({"writing_design": result["fused_direction"]["writing_design"]}
+           if "writing_design" in result["fused_direction"] else {}),
     }
 
 
@@ -501,7 +649,17 @@ def build_writer_reference_blueprint(result: dict[str, Any]) -> list[str]:
     """Project the detailed Analyzer report into the existing Writer context field."""
 
     blueprint: list[str] = []
+    usage = {item["reference_id"]: item for item in result.get("reference_usage", [])}
     for analysis in result["reference_analyses"]:
+        if usage:
+            chosen = usage[analysis["reference_id"]]
+            prohibited = "；".join(analysis["prohibited_transfers"]) or "无"
+            blueprint.append(
+                f"{analysis['reference_id']}｜本方案采用：{chosen['adopted_value']}"
+                f"｜具体用途：{chosen['application']}｜不采用：{chosen['not_used']}"
+                f"｜禁止迁移：{prohibited}"
+            )
+            continue
         transferable = "；".join(analysis["transferable_points"]) or "无"
         prohibited = "；".join(analysis["prohibited_transfers"]) or "无"
         blueprint.append(
@@ -521,10 +679,20 @@ def build_writer_reference_blueprint(result: dict[str, Any]) -> list[str]:
 
 
 def approval_snapshot(
-    result: dict[str, Any], gate_a: dict[str, Any], direction_version: int
+    result: dict[str, Any], gate_a: dict[str, Any], direction_version: int,
+    selected_option_id: str | None = None,
 ) -> dict[str, Any]:
     if gate_a.get("direction_version") != direction_version:
         _fail("SLIM_DIRECTION_RESPONSE_INVALID", "Gate A version does not match approval")
+    if result.get("analysis_version") == "slim-1.1":
+        selected = select_direction(result, selected_option_id)
+        option_id = selected["selected_option_id"]
+        selected_gate = next(g for g in gate_a["direction_options"] if g["option_id"] == option_id)
+        approved = approval_snapshot(selected, selected_gate, direction_version)
+        approved.update(approval_version="content-koubo-slim-approved-direction-v2",
+                        selected_option_id=option_id, approved_gate_a=gate_a,
+                        gate_a_sha256=canonical_json_hash(gate_a))
+        return approved
     approved_direction = {
         "target_audience": gate_a["target_audience"],
         "core_promise": gate_a["core_promise"],
@@ -532,6 +700,7 @@ def approval_snapshot(
         "structure_plan": gate_a["oral_structure"],
         "user_boundaries": gate_a["user_boundaries"],
         "generalization_boundary": gate_a["generalization_boundary"],
+        **({"writing_design": gate_a["writing_design"]} if "writing_design" in gate_a else {}),
     }
     return {
         "approval_version": "content-koubo-slim-approved-direction-v1",
@@ -566,12 +735,16 @@ def _validate_approved_direction(value: Any, *, code: str) -> dict[str, Any]:
         "user_boundaries",
         "generalization_boundary",
     }
-    if not isinstance(value, dict) or set(value) != expected:
+    if not isinstance(value, dict) or set(value) - {"writing_design"} != expected:
         _fail(code, "approved_direction fields are invalid", workflow_stage="正在准备客户内容资料")
     _nonempty(value["target_audience"], "target_audience", code=code)
     _nonempty(value["core_promise"], "core_promise", code=code)
     _string_list(value["external_reference_value"], "external_reference_value", code=code)
     _string_list(value["structure_plan"], "structure_plan", code=code)
+    if "writing_design" in value:
+        validate_writing_design(value["writing_design"], code=code)
+        if value["structure_plan"] != design_structure(value["writing_design"]):
+            _fail(code, "approved structure does not match writing design")
     boundaries = value["user_boundaries"]
     if not isinstance(boundaries, dict) or set(boundaries) != {
         "user_thoughts",

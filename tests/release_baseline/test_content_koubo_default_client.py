@@ -9,8 +9,8 @@ import unittest
 from unittest import mock
 
 
-ROOT = Path(__file__).resolve().parents[1]
-SKILL_ROOT = ROOT / "Skills" / "content-koubo-slim"
+ROOT = Path(__file__).resolve().parents[2]
+SKILL_ROOT = ROOT / ("Skills" if (ROOT / "Skills/content-koubo-slim").is_dir() else "skills/content-mainline") / "content-koubo-slim"
 sys.path.insert(0, str(SKILL_ROOT))
 
 from runtime.client_registry import (  # noqa: E402
@@ -148,7 +148,7 @@ class DefaultClientTests(unittest.TestCase):
             reference = root / "reference.md"
             reference.write_text("# 参考\n\n先确认问题，再给方案。\n", encoding="utf-8")
 
-            response, task_record = prepare_direction_stage(
+            response, task_record = prepare_direction_stage(analysis_version="slim-1.0",
                 registry_path=registry,
                 runs_root=root / "runs",
                 client_id=None,

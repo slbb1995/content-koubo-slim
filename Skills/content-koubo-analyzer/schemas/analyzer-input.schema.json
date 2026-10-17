@@ -19,15 +19,56 @@
     "revision_request"
   ],
   "properties": {
-    "analysis_version": {"const": "slim-1.0"},
-    "topic_original": {"type": "string", "minLength": 1},
-    "topic_normalized": {"type": "string", "minLength": 1},
-    "topic_normalized_source": {"const": "system_generated"},
-    "client_id": {"type": "string", "minLength": 1},
-    "speaker_mode": {"enum": ["personal_ip", "company_brand", "neutral"]},
-    "user_thoughts": {"type": ["string", "null"]},
-    "must_keep": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-    "must_avoid": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "analysis_version": {
+      "enum": [
+        "slim-1.0",
+        "slim-1.1"
+      ]
+    },
+    "topic_original": {
+      "type": "string",
+      "minLength": 1
+    },
+    "topic_normalized": {
+      "type": "string",
+      "minLength": 1
+    },
+    "topic_normalized_source": {
+      "const": "system_generated"
+    },
+    "client_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "speaker_mode": {
+      "enum": [
+        "personal_ip",
+        "company_brand",
+        "neutral"
+      ]
+    },
+    "user_thoughts": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "must_keep": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "must_avoid": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
     "references": {
       "type": "array",
       "minItems": 0,
@@ -35,26 +76,70 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["reference_id", "title", "content", "source_boundary"],
+        "required": [
+          "reference_id",
+          "title",
+          "content",
+          "source_boundary"
+        ],
         "properties": {
-          "reference_id": {"type": "string", "pattern": "^REF-[0-9]{3}$"},
-          "title": {"type": "string", "minLength": 1},
-          "content": {"type": "string", "minLength": 1},
-          "source_boundary": {"type": "string", "minLength": 1}
+          "reference_id": {
+            "type": "string",
+            "pattern": "^REF-[0-9]{3}$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_boundary": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },
     "planning_guidance": {
-      "type": "array", "maxItems": 3,
+      "type": "array",
+      "maxItems": 3,
       "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["asset_id", "relative_path", "page_sha256", "content", "reason"],
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asset_id",
+          "relative_path",
+          "page_sha256",
+          "content",
+          "reason"
+        ],
         "properties": {
-          "asset_id": {"type": "string", "minLength": 1},
-          "relative_path": {"type": "string", "minLength": 1},
-          "page_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-          "content": {"type": "string", "minLength": 1},
-          "reason": {"type": "string", "minLength": 1}
+          "asset_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "relative_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "page_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "asset_version": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },
@@ -74,35 +159,111 @@
           "relevance_evidence"
         ],
         "properties": {
-          "asset_id": {"type": "string", "minLength": 1},
-          "asset_role": {"enum": ["peer_content_asset", "oral_method_asset"]},
-          "source_metadata": {"type": "object"},
-          "relative_path": {"type": "string", "minLength": 1},
-          "page_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-          "audience_scope": {"enum": ["consumer", "internal_sales_training", "both"]},
-          "excerpt": {"type": "string", "minLength": 1},
+          "asset_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "asset_role": {
+            "enum": [
+              "peer_content_asset",
+              "oral_method_asset"
+            ]
+          },
+          "source_metadata": {
+            "type": "object"
+          },
+          "relative_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "page_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "audience_scope": {
+            "enum": [
+              "consumer",
+              "internal_sales_training",
+              "both"
+            ]
+          },
+          "excerpt": {
+            "type": "string",
+            "minLength": 1
+          },
           "relevance_evidence": {
             "type": "array",
             "minItems": 1,
             "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         }
       }
     },
     "revision_request": {
       "oneOf": [
-        {"type": "null"},
+        {
+          "type": "null"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["base_direction_version", "feedback"],
+          "required": [
+            "base_direction_version",
+            "feedback"
+          ],
           "properties": {
-            "base_direction_version": {"type": "integer", "minimum": 1},
-            "feedback": {"type": "string", "minLength": 1}
+            "base_direction_version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "feedback": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         }
       ]
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "analysis_version": {
+            "const": "slim-1.1"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "planning_guidance"
+        ],
+        "properties": {
+          "planning_guidance": {
+            "contains": {
+              "type": "object",
+              "required": [
+                "asset_id",
+                "asset_version"
+              ],
+              "properties": {
+                "asset_id": {
+                  "const": "ORAL-GUIDE-001"
+                },
+                "asset_version": {
+                  "const": "1.1.0"
+                }
+              }
+            },
+            "minContains": 1,
+            "maxContains": 1
+          }
+        }
+      }
+    }
+  ]
 }
