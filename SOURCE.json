@@ -1,13 +1,21 @@
 {
   "development": {
-    "commit": "24bf7d25f41e033bc6a74cf76d5588c37f137cfe",
+    "commit": "f5099b37dd60e364294574a6a0c67d588b5652a8",
     "repository": "https://github.com/slbb1995/content-workflow-skills",
     "skill_root": "skills/content-mainline"
   },
   "payload": [
     {
+      "path": ".gitattributes",
+      "sha256": "d60f352d0db1404c70afb4bb8b2ca3fd1c610572aa40720e8a0b7baa7885418c"
+    },
+    {
       "path": ".github/workflows/verify.yml",
       "sha256": "02294e265e7c8bc287d255aedfc801c39049962e7c3af8f657282cebc95e4b85"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "b7cd805d347ec0e264256034964ae79141f3a24a889685a414171df13f3d41c1"
     },
     {
       "path": "AGENTS.md",
@@ -471,7 +479,7 @@
     },
     {
       "path": "tools/build_release_manifest.py",
-      "sha256": "84cb6317927d58459af549da65c2732d7048176c08f442d9c9c65dcc699bc1f2"
+      "sha256": "e08671ed6256657532056f29d54c617fcdf0203b9e48f18d0833188abe45c955"
     },
     {
       "path": "tools/verify.py",

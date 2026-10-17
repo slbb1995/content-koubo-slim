@@ -40,7 +40,7 @@ def runtime_files() -> list[dict[str, object]]:
             files.append(
                 {
                     "bytes": path.stat().st_size,
-                    "mode": "0644",
+                    "mode": "0755" if path.stat().st_mode & 0o111 else "0644",
                     "path": path.relative_to(ROOT).as_posix(),
                     "sha256": sha256(path),
                     "skill": skill,

@@ -354,7 +354,7 @@
       },
       {
         "bytes": 133361,
-        "mode": "0644",
+        "mode": "0755",
         "path": "Skills/content-koubo-slim/scripts/content_koubo_slim.py",
         "sha256": "3c55338df29c70f3cf79cc74b51471194775b283978d8ac80dbca6651c5736f3",
         "skill": "content-koubo-slim"
@@ -411,7 +411,7 @@
       "content-koubo-slim",
       "content-koubo-writer"
     ],
-    "tree_sha256": "55927f5005c4355914e1c7133dfb6a5cb672e0fad72034a368dcf20301c4fc67"
+    "tree_sha256": "5f7a4bd7a560489abdb779846bd3f1b273f435159e5f3fc50552b4dd6805a896"
   },
   "schema_version": "content-koubo-slim-release-v1",
   "source": {
