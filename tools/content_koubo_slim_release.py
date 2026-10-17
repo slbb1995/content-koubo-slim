@@ -218,14 +218,14 @@ def write_file(path: Path, body: bytes, mode: int, epoch: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(body)
     chmod_plain(path, mode)
-    os.utime(path, (epoch, epoch), follow_symlinks=False)
+    os.utime(path, (epoch, epoch), **({} if os.name == "nt" else {"follow_symlinks": False}))
 
 
 def normalize_directories(root: Path, epoch: int, mode: int = 0o755) -> None:
     directories = [root] + [item for item in root.rglob("*") if item.is_dir() and not item.is_symlink()]
     for directory in sorted(directories, key=lambda item: len(item.parts), reverse=True):
         chmod_plain(directory, mode)
-        os.utime(directory, (epoch, epoch), follow_symlinks=False)
+        os.utime(directory, (epoch, epoch), **({} if os.name == "nt" else {"follow_symlinks": False}))
 
 
 def checksum_body(records: list[dict[str, Any]]) -> bytes:

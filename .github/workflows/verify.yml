@@ -24,5 +24,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Verify complete exported package and regressions
+      - name: Verify single repository and complete oral regressions
         run: python -X utf8 -B tools/verify.py

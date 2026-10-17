@@ -15,7 +15,7 @@
     },
     {
       "path": ".github/workflows/verify.yml",
-      "sha256": "02294e265e7c8bc287d255aedfc801c39049962e7c3af8f657282cebc95e4b85"
+      "sha256": "338ec446d07b4b521e3be65ea331f66e9532806ca1a8fa400f5f70ebf5eba82c"
     },
     {
       "path": ".gitignore",
@@ -651,7 +651,7 @@
     },
     {
       "path": "tools/content_koubo_slim_release.py",
-      "sha256": "87f4f5d9b64d804a57af5b4573e96eda50b46133627664ced7dec2d64bc22bbf"
+      "sha256": "14df578a09f1092cee13867381707c9158e659a3199b0c848c7b65d441dd0a41"
     },
     {
       "path": "tools/install_verified.py",
